@@ -1,0 +1,425 @@
+#!/usr/bin/env bash
+VERSION_NUMBER="1.0"
+VERSION_STRING=$'Cilo\t(Unix)\t'"$VERSION_NUMBER"
+USAGE=`cat <<EOF
+
+           USAGE
+                cilo [OPTIONS] <task>
+                cilo --version
+
+           DESCRIPTION
+                Cilo is a decentralized CI/CD build tool. It uses a local docker container to isolate builds while loading secrets from a cilo server credential store.
+
+           OPTIONS
+                -d|--docker-socket <docker-socker-filepath>
+                        Use custome docker socket for communicating with docker.
+                        DEFAULT:   /var/run/docker.sock
+                        NOTE:      Follows same rules as --unix-socket from curl.
+
+                --i|--image
+                        Name of docker image used to build.
+                        DEFAULT:   cilo
+                        NOTE:      Must inherit from cilo's image.
+                        
+
+                --interactive|--no-interactive
+                        Runs the project in interactive mode
+                        DEFAULT:   --no-interactive
+
+                -l|--library <cilo-library-path>
+                        Will load additional build libraries with the ".cilo" extension from this path.
+                        DEFAULT:   lib/
+                        NOTE: must be relative to project with no leading slash and must have a trailing slash.
+
+                --log
+                        Automatically logs in local directory
+                        DEFAULT:   log/
+
+                ---log-directory <dir>
+                        Write logs to a directory other than log/
+                        NOTE:      must be relative to project with no leading slash and must have a trailing slash.
+                        
+                -r|--registry <image-registry-url>
+                        Use to get image from a differenct registry
+
+                -s|--server <cilo-server-url>
+                       URL of your cilo server.
+
+                -v|--verbose
+                        Writes verbose output to stdout and logs when relevent.
+
+                -vvv
+                        Extra verbose...to the point of debug.
+                        
+                --version
+                        Shows Cilo version number. 
+                        OUTPUT:    Cilo    (<operating-system>)    <major-version>.<minor-version>.[release]:[tag]
+                        NOTE:      Fields are tab delimited for using 'cut -fn'.
+                        
+
+EOF`
+
+showUsage() {
+    printf "%s\n\n" "$USAGE"
+}
+
+PWD=`pwd`
+PROJECT_NAME="cilo" # todo: get from git or filestructure
+TASK=()
+VERBOSE="false"
+VVV="false"
+LOGGING="false"
+LOGGING_DIR="log/"
+SHOW_VERSION="false"
+DOCKER_SOCKET="/var/run/docker.sock"
+LIBRARY_PATH="lib/"
+SERVER_URL=""
+INTERACTIVE="true"
+IMAGE_NAME="cilo"
+CUSTOM_REGISTRY="false"
+REGISTRY_URL=""
+while [[ $# -gt 0 ]]
+do
+    key="$1"
+    case $key in
+        -v|--verbose)
+            VERBOSE="true"
+            shift;
+            ;;
+        -vvv)
+            VERBOSE="true"
+            VVV="true"
+            shift;
+            ;;
+        --version)
+            SHOW_VERSION="true"
+            shift;
+            ;;
+        -d|--docker-socket)
+            DOCKER_SOCKET="$2"
+            shift; shift
+            ;;
+        -l|--library)
+            LIBRARY_PATH="$2"
+            shift; shift
+            ;;
+        -s|--server)
+            SERVER_URL="$2"
+            shift; shift
+            ;;
+        --log)
+            LOGGING="true"
+            shift;
+            ;;
+        --log-directory)
+            LOGGING_DIR="$2"
+            shift; shift;
+            ;;
+        --interactive)
+            INTERACTIVE="true"
+            shift;
+            ;;
+        --no-interactive)
+            INTERACTIVE="false"
+            shift;
+            ;;
+        --i|--image)
+            IMAGE_NAME="$2"
+            shift; shift
+            ;;
+        -r|--registry)
+            REGISTRY_URL="$2"
+            CUSTOM_REGISTRY="true"
+            shift; shift;
+            ;;
+        *)
+            if [[ $key == -* ]]; then
+                printf "\n\t%s\n" "ERROR: Unknown option ($key)."
+                showUsage
+                exit 1
+            fi
+            TASK+=("$1")
+            shift
+            ;;
+    esac
+done
+set -- "${TASK[@]}" # SETS positional params to just the task
+
+
+getDateTimeString() {
+    date +"%m-%d-%Y-%H-%M-%S" | tr -d '\n\r' | tr -d '\r\n' | tr -d '\n' | tr -d ' '
+}
+
+if $SHOW_VERSION; then
+    printf "%s\n" "$VERSION_STRING"
+    exit 0
+fi
+if [ -z ${TASK+x} ]; then
+    showUsage
+    exit 1
+fi
+INITIAL_TIME=`getDateTimeString`
+LOGGING_FILE="$PWD/$LOGGING_DIR""cilo-""$INITIAL_TIME.txt"
+if $LOGGING; then
+    if ! [ -d "$PWD/$LOGGING_DIR" ]; then
+        mkdir -p "$PWD/$LOGGING_DIR" 1> /dev/null 2> /dev/null
+        if ! [ "$(($?))" -eq "0" ]; then
+            printf "%s\n" "Logging failed to initialize. Could not create directory ($LOGGING_DIR)."
+            exit 1
+        fi
+        if ! [ "$?" -eq "0" ]; then
+            printf "%s\n" "Logging failed to initialize. Directory malformed ($LOGGING_DIR)."
+            exit 1
+        fi
+    fi
+    if ! [ -e "$LOGGING_FILE" ]; then
+        touch "$LOGGING_FILE" 1> /dev/null 2> /dev/null
+        if ! [ "$?" -eq "0" ]; then
+            printf "%s\n" "Logging failed to initialize. Log file could not be created ($LOGGING_FILE)."
+            exit 1
+        fi
+    fi
+    printf "%s\n" "LOGGING INITIATED WITH FILE ($LOGGING_FILE)"
+fi
+
+
+logWithTimestampHeading() {
+    local timestamp=$INITIAL_TIME
+    logWithHeading "$1" "$2" "$timestamp $3: \t "
+}
+logWithHeading() {
+    local logfile="$LOGGING_FILE"
+    local shouldtee="true"
+    if ! $LOGGING; then
+        logfile=""
+        shouldtee="false"
+    fi
+    if $VERBOSE; then
+        if $shouldtee; then
+            printf "$3$1" "$2" | tee -a "$logfile"
+        else
+            printf "$3$1" "$2"
+        fi
+    else
+        if $shouldtee; then
+            printf "$1" "$2" | tee -a "$logfile"
+        else
+            printf "$1" "$2"
+        fi
+    fi
+}
+log() {
+    logWithHeading "$1" "$2" ""
+}
+
+info() {
+    logWithTimestampHeading "$1" "$2" "INFO"
+}
+
+warn() {
+    logWithTimestampHeading "$1" "$2" "WARN"
+}
+
+error() {
+    logWithTimestampHeading "$1" "$2" "ERROR"
+}
+
+runCommand() {
+    shouldreturn="false"
+    if [ "$1" = "-r" ]; then
+        shift;
+        shouldreturn="true"
+    fi
+    if $VERBOSE; then
+        info "Running command (%s).\n" $@
+        if $VVV; then
+            $@
+        else
+            RESULT=`$@`
+            if $shouldreturn; then
+                printf "%s" "$RESULT"
+            fi
+        fi
+        if ! [[ "$(($?))" -eq "0" ]]; then
+            warn "Command($1 $2...) returned in error:\n%s\n" "$RESULT"
+        fi
+    fi
+}
+
+if $LOGGING; then
+    if [ -d "$PWD/.git" ]; then
+        if ! [ -e "$PWD/.gitignore" ]; then
+            info "%s\n" "Git is present and no ignore file is found. Adding ignore file."
+            touch ".gitignore" 1> /dev/null 2> /dev/null
+        fi
+        logIgnoreCount=`cat "$PWD/.gitignore" | grep "log\/" | wc -l | tr -d ' '`
+        if [ "$((logIgnoreCount))" -eq "0" ]; then
+            info "%s\n" "Git ignore is present (.gitignore) and cilo logs are not ignored yet. Adding ignore line to .gitignore."
+            printf "# ------- CILO ---------\n%s\n" 'log/' >> "$PWD/.gitignore"
+        fi
+    fi
+fi
+if $VERBOSE; then
+    info "PROJECT_NAME      = %s\n" "${PROJECT_NAME}"
+    info "INTERACTIVE      = %s\n" "${INTERACTIVE}"
+    info "PWD              = %s\n" "${PWD}"
+    info "VERBOSE          = %s\n" "${VERBOSE}"
+    info "VVV              = %s\n" "${VERBOSE}"
+    info "SHOW_VERSION     = %s\n" "${SHOW_VERSION}"
+    info "DOCKER_SOCKET    = %s\n" "${DOCKER_SOCKET}"
+    info "LIBRARY_PATH     = %s\n" "${LIBRARY_PATH}"
+    info "SERVER_URL       = %s\n" "${SERVER_URL}"
+    info "LOGGING          = %s\n" "${LOGGING}"
+    info "LOGGING_DIR      = %s\n" "${LOGGING_DIR}"
+    info "IMAGE_NAME       = %s\n" "${IMAGE_NAME}"
+    info "REGISTRY_URL     = %s\n" "${REGISTRY_URL}"
+    info "CUSTOM_REGISTRY  = %s\n" "${CUSTOM_REGISTRY}"
+    info "TASK             = " ""
+    for COMMAND in "${TASK[@]}"; do
+        log "%s " "$COMMAND"
+    done
+    log "\n"
+fi
+
+dockerGet() {
+    curl -s --unix-socket "$DOCKER_SOCKET" "http:$1" 2>&1
+}
+
+dockerPost() {
+    curl --post301 -s --unix-socket "$DOCKER_SOCKET" "http:$1" 2>&1
+}
+
+dockerHasImage() {
+    if ! [[ `docker images -q "$1" 2> /dev/null` == "" ]]; then
+        true
+    else
+        false
+    fi
+}
+
+dockerCreateImage() {
+    docker pull "$1" > /dev/null 2>&1
+    if ! [[ "$(($?))" -eq "0" ]]; then
+        if [ -e "$PWD/build-cilo-image.sh" ]; then
+            if $VERBOSE; then
+                info "%s\n" "Found cilo build script. Building:"
+            fi
+            if $VVV; then
+                $PWD/build-cilo-image.sh
+            else
+                $PWD/build-cilo-image.sh > /dev/null 2>&1
+            fi
+            if ! [ "$(($?))" -eq "0" ]; then
+                error "Something went wrong with the cilo image build script."
+            fi
+            if $VERBOSE; then
+                info "%s\n" "Built cilo image."
+            fi
+        fi
+    else
+        info "%s\n" "Pulled cilo docker image."
+    fi
+}
+
+dockerRunImage() {
+    if $VERBOSE; then
+        info "%s\n" "Starting docker image ($1)."
+        log '===================================RUNNING TASK=================================\n' "" ""
+    fi
+    docker kill "$2" > /dev/null 2>&1
+    docker rm -f "$2"  > /dev/null 2>&1
+    if [ ! "$(docker ps -q -f name=$2)" ]; then
+        if [ "$(docker ps -aq -f status=exited -f name=$2)" ]; then
+            docker rm -f "$2"  > /dev/null 2>&1
+        fi
+        docker run --name "$2" -it "$1"
+    fi
+}
+
+validateDocker() {
+    if [ -S $DOCKER_SOCKET ]; then
+        if $VERBOSE; then
+            info "%s\n" "Found docker ($DOCKER_SOCKET)"
+        fi
+        local CURL_RESULT=`dockerGet /ping`
+        local JQ_RESULT=`printf "%s" "$CURL_RESULT" | jq -r '.message' 2>&1`
+        if [ "$JQ_RESULT" = "page not found" ]; then
+            if $VERBOSE; then
+                info "%s\n" "Docker is running and accesible through unix socket."
+            fi
+        else
+            error "%s\n" "Docker is not running or socket not listening. Make sure docker is running and socket is open."
+            exit 1
+        fi
+    else
+        error "$s\n" "Docker could not be found. Either docker is not running or the socket could not be found in location ($DOCKER_SOCKET)"
+    fi
+}
+
+getDateTimeString() {
+    date +"%m-%d-%Y-%H-%M-%S" | tr -d '\n\r' | tr -d '\r\n' | tr -d '\n' | tr -d ' '
+}
+
+doesCommandExist() {
+    if [ -z ${1+x} ]; then
+        error "%s" "Cilo script - doesCommandExist was called without any argmunets."
+        exit 1
+    fi
+    which $1 1> /dev/null 2> /dev/null
+}
+
+doCommandsExist() {
+    if $VERBOSE; then
+        info "%s\n" "Computing Dependencies"
+    fi
+    for command in $1; do
+        if $VERBOSE; then
+            log "\t%s" "DEPENDENCY"
+            log "%+16s" " $command "
+        fi
+        if doesCommandExist "$command"; then
+            local path=`which "$command"`
+            if $VERBOSE; then
+                log "%-60s" " $path "
+                log "%s\n" " [ OK ]"
+            fi
+        else
+            if $VERBOSE; then
+                log "%s\n" " [ NOT FOUND ]"
+            fi
+            error "%s\n" "Cilo depends on \"$command\". Please install \"$command\" then try again."
+            exit 1
+        fi
+    done
+}
+
+runProject() {
+    local imageName="$IMAGE_NAME"
+    if ! dockerHasImage "$imageName"; then
+        dockerCreateImage "$imageName"
+        if ! dockerHasImage "$imageName"; then
+            error "%s\n" "Cannot find cilo docker image. Make sure you are able to connect to docker hub or use --registry option."
+            exit 1
+        fi
+    fi
+    dockerRunImage "$imageName" "$PROJECT_NAME"
+}
+
+dependencies=`cat << EOF
+pwd
+printf
+cat
+tee
+grep
+sed
+awk
+tr
+docker
+curl
+jq
+EOF`
+doCommandsExist "$dependencies"
+
+validateDocker
+runProject
+
