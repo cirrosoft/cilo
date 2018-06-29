@@ -1,0 +1,16 @@
+def checkout() {
+    println "CHECKING OUT"
+}
+
+step "checkout", {
+     checkout()
+     // $ open-ssl enc -d aes-256-cbc
+}
+
+step "build", {
+     println "BUILDING"
+}
+
+step "test", {
+     println "TESTING"
+}

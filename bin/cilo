@@ -4,7 +4,7 @@ VERSION_STRING=$'Cilo\t(Unix)\t'"$VERSION_NUMBER"
 USAGE=`cat <<EOF
 
            USAGE
-                cilo [OPTIONS] <task>
+                cilo [OPTIONS] <pipeline>
                 cilo --version
 
            DESCRIPTION
@@ -12,7 +12,7 @@ USAGE=`cat <<EOF
 
            OPTIONS
                 -d|--docker-socket <docker-socker-filepath>
-                        Use custome docker socket for communicating with docker.
+                        Use custom docker socket for communicating with docker.
                         DEFAULT:   /var/run/docker.sock
                         NOTE:      Follows same rules as --unix-socket from curl.
 
@@ -20,24 +20,26 @@ USAGE=`cat <<EOF
                         Name of docker image used to build.
                         DEFAULT:   cilo
                         NOTE:      Must inherit from cilo's image.
-                        
 
                 --interactive|--no-interactive
                         Runs the project in interactive mode
                         DEFAULT:   --no-interactive
 
+                -h|--help|--usage
+                        Show usage
+
                 -l|--library <cilo-library-path>
                         Will load additional build libraries with the ".cilo" extension from this path.
                         DEFAULT:   lib/
-                        NOTE: must be relative to project with no leading slash and must have a trailing slash.
+                        NOTE:      Must be relative to project with no leading slash and must have a trailing slash.
 
                 --log
                         Automatically logs in local directory
                         DEFAULT:   log/
 
-                ---log-directory <dir>
+                --log-directory <dir>
                         Write logs to a directory other than log/
-                        NOTE:      must be relative to project with no leading slash and must have a trailing slash.
+                        NOTE:      Must be relative to project with no leading slash and must have a trailing slash.
                         
                 -r|--registry <image-registry-url>
                         Use to get image from a differenct registry
@@ -45,8 +47,11 @@ USAGE=`cat <<EOF
                 -s|--server <cilo-server-url>
                        URL of your cilo server.
 
+                -u|--url-library <shared-library-url>
+                       Download and use a shared library from a url. 
+
                 -v|--verbose
-                        Writes verbose output to stdout and logs when relevent.
+                        Writes verbose output to stdout and logs when relevent. url libraries must by cilo files normally with the ".cilo" extension.
 
                 -vvv
                         Extra verbose...to the point of debug.
@@ -65,7 +70,7 @@ showUsage() {
 
 PWD=`pwd`
 PROJECT_NAME="cilo" # todo: get from git or filestructure
-TASK=()
+PIPELINE=()
 VERBOSE="false"
 VVV="false"
 LOGGING="false"
@@ -73,6 +78,7 @@ LOGGING_DIR="log/"
 SHOW_VERSION="false"
 DOCKER_SOCKET="/var/run/docker.sock"
 LIBRARY_PATH="lib/"
+LIBRARY_URL=""
 SERVER_URL=""
 INTERACTIVE="true"
 IMAGE_NAME="cilo"
@@ -82,6 +88,10 @@ while [[ $# -gt 0 ]]
 do
     key="$1"
     case $key in
+        -h|--help|--usage)
+            showUsage
+            exit 0
+            ;;
         -v|--verbose)
             VERBOSE="true"
             shift;
@@ -102,6 +112,10 @@ do
         -l|--library)
             LIBRARY_PATH="$2"
             shift; shift
+            ;;
+        -u|--url-library)
+            LIBRARY_URL="$2"
+            shift; shift;
             ;;
         -s|--server)
             SERVER_URL="$2"
@@ -138,12 +152,12 @@ do
                 showUsage
                 exit 1
             fi
-            TASK+=("$1")
+            PIPELINE+=("$1")
             shift
             ;;
     esac
 done
-set -- "${TASK[@]}" # SETS positional params to just the task
+set -- "${PIPELINE[@]}" # SETS positional params to just the pipeline
 
 
 getDateTimeString() {
@@ -154,9 +168,8 @@ if $SHOW_VERSION; then
     printf "%s\n" "$VERSION_STRING"
     exit 0
 fi
-if [ -z ${TASK+x} ]; then
-    showUsage
-    exit 1
+if [ -z ${PIPELINE+x} ]; then
+    PIPELINE="pipeline"
 fi
 INITIAL_TIME=`getDateTimeString`
 LOGGING_FILE="$PWD/$LOGGING_DIR""cilo-""$INITIAL_TIME.txt"
@@ -274,8 +287,8 @@ if $VERBOSE; then
     info "IMAGE_NAME       = %s\n" "${IMAGE_NAME}"
     info "REGISTRY_URL     = %s\n" "${REGISTRY_URL}"
     info "CUSTOM_REGISTRY  = %s\n" "${CUSTOM_REGISTRY}"
-    info "TASK             = " ""
-    for COMMAND in "${TASK[@]}"; do
+    info "PIPELINE         = " ""
+    for COMMAND in "${PIPELINE[@]}"; do
         log "%s " "$COMMAND"
     done
     log "\n"
@@ -324,7 +337,7 @@ dockerCreateImage() {
 dockerRunImage() {
     if $VERBOSE; then
         info "%s\n" "Starting docker image ($1)."
-        log '===================================RUNNING TASK=================================\n' "" ""
+        log '===================================RUNNING PIPELINE=================================\n' "" ""
     fi
     docker kill "$2" > /dev/null 2>&1
     docker rm -f "$2"  > /dev/null 2>&1
@@ -332,7 +345,7 @@ dockerRunImage() {
         if [ "$(docker ps -aq -f status=exited -f name=$2)" ]; then
             docker rm -f "$2"  > /dev/null 2>&1
         fi
-        docker run --name "$2" -it "$1"
+        docker run -v "$PWD:/home/groovy/cilo/workspace" --name "$2" -it -e CILO_PIPELINE="$PIPELINE" "$1" 
     fi
 }
 
