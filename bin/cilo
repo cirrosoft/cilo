@@ -84,6 +84,30 @@ INTERACTIVE="true"
 IMAGE_NAME="cilo"
 CUSTOM_REGISTRY="false"
 REGISTRY_URL=""
+
+
+if [ -f "~/.cilo" ]; then
+    PROJECT_NAME=`cat .cilo | grep "project.name" | sed -e 's/^project.name=\"\(.*\)\"/\1/'`
+    LOGGING_DIR=`cat .cilo | grep "logging.directory" | sed -e 's/^logging.directory=\"\(.*\)\"/\1/'`
+    DOCKER_SOCKET=`cat .cilo | grep "docker.socket" | sed -e 's/^docker.socket=\"\(.*\)\"/\1/'`
+    REGISTRY_URL=`cat .cilo | grep "docker.registry" | sed -e 's/^docker.registry=\"\(.*\)\"/\1/'`
+    IMAGE_NAME=`cat .cilo | grep "docker.image_name" | sed -e 's/^docker.image_name=\"\(.*\)\"/\1/'`
+    LIBRARY_PATH=`cat .cilo | grep "library.path" | sed -e 's/^library.path=\"\(.*\)\"/\1/'`
+    LIBRARY_URL=`cat .cilo | grep "library.url" | sed -e 's/^library.url=\"\(.*\)\"/\1/'`
+    SERVER_URL=`cat .cilo | grep "server.url" | sed -e 's/^server.url=\"\(.*\)\"/\1/'`
+fi    
+
+if [ -f ".cilo" ]; then
+    PROJECT_NAME=`cat .cilo | grep "project.name" | sed -e 's/^project.name=\"\(.*\)\"/\1/'`
+    LOGGING_DIR=`cat .cilo | grep "logging.directory" | sed -e 's/^logging.directory=\"\(.*\)\"/\1/'`
+    DOCKER_SOCKET=`cat .cilo | grep "docker.socket" | sed -e 's/^docker.socket=\"\(.*\)\"/\1/'`
+    REGISTRY_URL=`cat .cilo | grep "docker.registry" | sed -e 's/^docker.registry=\"\(.*\)\"/\1/'`
+    IMAGE_NAME=`cat .cilo | grep "docker.image_name" | sed -e 's/^docker.image_name=\"\(.*\)\"/\1/'`
+    LIBRARY_PATH=`cat .cilo | grep "library.path" | sed -e 's/^library.path=\"\(.*\)\"/\1/'`
+    LIBRARY_URL=`cat .cilo | grep "library.url" | sed -e 's/^library.url=\"\(.*\)\"/\1/'`
+    SERVER_URL=`cat .cilo | grep "server.url" | sed -e 's/^server.url=\"\(.*\)\"/\1/'`
+fi
+
 while [[ $# -gt 0 ]]
 do
     key="$1"
@@ -158,7 +182,6 @@ do
     esac
 done
 set -- "${PIPELINE[@]}" # SETS positional params to just the pipeline
-
 
 getDateTimeString() {
     date +"%m-%d-%Y-%H-%M-%S" | tr -d '\n\r' | tr -d '\r\n' | tr -d '\n' | tr -d ' '
@@ -273,7 +296,7 @@ if $LOGGING; then
     fi
 fi
 if $VERBOSE; then
-    info "PROJECT_NAME      = %s\n" "${PROJECT_NAME}"
+    info "PROJECT_NAME     = %s\n" "${PROJECT_NAME}"
     info "INTERACTIVE      = %s\n" "${INTERACTIVE}"
     info "PWD              = %s\n" "${PWD}"
     info "VERBOSE          = %s\n" "${VERBOSE}"
