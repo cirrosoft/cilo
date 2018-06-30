@@ -1,0 +1,16 @@
+# TOML configuration for Cilo projects
+
+title = "Project Specific .cilo"
+
+[owner]
+user.name="jbfrench"
+
+[cilo]
+project.name="cilo_project"
+logging.directory="log2/"
+docker.socket="/var/run/docker.sock"
+docker.registry="registry.url"
+docker.image_name="image_name"
+library.path="lib2/"
+library.url="lib.url"
+server.url="server.url"
