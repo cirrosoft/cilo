@@ -85,27 +85,42 @@ IMAGE_NAME="cilo"
 CUSTOM_REGISTRY="false"
 REGISTRY_URL=""
 
-
 if [ -f "~/.cilo" ]; then
-    PROJECT_NAME=`cat .cilo | grep "project.name" | sed -e 's/^project.name=\"\(.*\)\"/\1/'`
-    LOGGING_DIR=`cat .cilo | grep "logging.directory" | sed -e 's/^logging.directory=\"\(.*\)\"/\1/'`
-    DOCKER_SOCKET=`cat .cilo | grep "docker.socket" | sed -e 's/^docker.socket=\"\(.*\)\"/\1/'`
-    REGISTRY_URL=`cat .cilo | grep "docker.registry" | sed -e 's/^docker.registry=\"\(.*\)\"/\1/'`
-    IMAGE_NAME=`cat .cilo | grep "docker.image_name" | sed -e 's/^docker.image_name=\"\(.*\)\"/\1/'`
-    LIBRARY_PATH=`cat .cilo | grep "library.path" | sed -e 's/^library.path=\"\(.*\)\"/\1/'`
-    LIBRARY_URL=`cat .cilo | grep "library.url" | sed -e 's/^library.url=\"\(.*\)\"/\1/'`
-    SERVER_URL=`cat .cilo | grep "server.url" | sed -e 's/^server.url=\"\(.*\)\"/\1/'`
+    PROJECT_NAME_TEMP=`cat .cilo | grep project.name | sed -e 's/^project.name=\"\(.*\)\"/\1/'`
+    PROJECT_NAME="${PROJECT_NAME_TEMP:-$PROJECT_NAME}"
+    LOGGING_DIR_TEMP=`cat .cilo | grep logging.directory | sed -e 's/^logging.directory=\"\(.*\)\"/\1/'`
+    LOGGING_DIR="${LOGGING_DIR_TEMP:-$LOGGING_DIR}"
+    DOCKER_SOCKET_TEMP=`cat .cilo | grep docker.socket | sed -e 's/^docker.socket=\"\(.*\)\"/\1/'`
+    DOCKER_SOCKET="${DOCKER_SOCKET_TEMP:-$DOCKER_SOCKET}"
+    REGISTRY_URL_TEMP=`cat .cilo | grep docker.registry | sed -e 's/^docker.registry=\"\(.*\)\"/\1/'`
+    REGISTRY_URL="${REGISTRY_URL_TEMP:-$REGISTRY_URL}"
+    REGISTRY_URL_TEMP=`cat .cilo | grep docker.image_name | sed -e 's/^docker.image_name=\"\(.*\)\"/\1/'`
+    IMAGE_NAME="${IMAGE_NAME_TEMP:-$IMAGE_NAME}"
+    LIBRARY_PATH_TEMP=`cat .cilo | grep library.path | sed -e 's/^library.path=\"\(.*\)\"/\1/'`
+    LIBRARY_PATH="${LIBRARY_PATH_TEMP:-$LIBRARY_PATH}"
+    LIBRARY_URL_TEMP=`cat .cilo | grep library.url | sed -e 's/^library.url=\"\(.*\)\"/\1/'`
+    LIBRARY_URL="${LIBRARY_URL_TEMP:-$LIBRARY_URL}"
+    SERVER_URL_TEMP=`TEMP=cat .cilo | grep server.url | sed -e 's/^server.url=\"\(.*\)\"\"/\1`
+    SERVER_URL_"${SERVER_URL_TEMP:-$SERVER_URL}"
 fi    
 
 if [ -f ".cilo" ]; then
-    PROJECT_NAME=`cat .cilo | grep "project.name" | sed -e 's/^project.name=\"\(.*\)\"/\1/'`
-    LOGGING_DIR=`cat .cilo | grep "logging.directory" | sed -e 's/^logging.directory=\"\(.*\)\"/\1/'`
-    DOCKER_SOCKET=`cat .cilo | grep "docker.socket" | sed -e 's/^docker.socket=\"\(.*\)\"/\1/'`
-    REGISTRY_URL=`cat .cilo | grep "docker.registry" | sed -e 's/^docker.registry=\"\(.*\)\"/\1/'`
-    IMAGE_NAME=`cat .cilo | grep "docker.image_name" | sed -e 's/^docker.image_name=\"\(.*\)\"/\1/'`
-    LIBRARY_PATH=`cat .cilo | grep "library.path" | sed -e 's/^library.path=\"\(.*\)\"/\1/'`
-    LIBRARY_URL=`cat .cilo | grep "library.url" | sed -e 's/^library.url=\"\(.*\)\"/\1/'`
-    SERVER_URL=`cat .cilo | grep "server.url" | sed -e 's/^server.url=\"\(.*\)\"/\1/'`
+    PROJECT_NAME_TEMP=`cat .cilo | grep project.name | sed -e 's/^project.name=\"\(.*\)\"/\1/'`
+    PROJECT_NAME="${PROJECT_NAME_TEMP:-$PROJECT_NAME}"
+    LOGGING_DIR_TEMP=`cat .cilo | grep logging.directory | sed -e 's/^logging.directory=\"\(.*\)\"/\1/'`
+    LOGGING_DIR="${LOGGING_DIR_TEMP:-$LOGGING_DIR}"
+    DOCKER_SOCKET_TEMP=`cat .cilo | grep docker.socket | sed -e 's/^docker.socket=\"\(.*\)\"/\1/'`
+    DOCKER_SOCKET="${DOCKER_SOCKET_TEMP:-$DOCKER_SOCKET}"
+    REGISTRY_URL_TEMP=`cat .cilo | grep docker.registry | sed -e 's/^docker.registry=\"\(.*\)\"/\1/'`
+    REGISTRY_URL="${REGISTRY_URL_TEMP:-$REGISTRY_URL}"
+    IMAGE_NAME_TEMP=`cat .cilo | grep docker.image_name | sed -e 's/^docker.image_name=\"\(.*\)\"/\1/'`
+    IMAGE_NAME="${IMAGE_NAME_TEMP:-$IMAGE_NAME}"
+    LIBRARY_PATH_TEMP=`cat .cilo | grep library.path | sed -e 's/^library.path=\"\(.*\)\"/\1/'`
+    LIBRARY_PATH="${LIBRARY_PATH_TEMP:-$LIBRARY_PATH}"
+    LIBRARY_URL_TEMP=`cat .cilo | grep library.url | sed -e 's/^library.url=\"\(.*\)\"/\1/'`
+    LIBRARY_URL="${LIBRARY_URL_TEMP:-$LIBRARY_URL}"
+    SERVER_URL_TEMP=`cat .cilo | grep server.url | sed -e 's/^server.url=\"\(.*\)\"/\1/'`
+    SERVER_URL="${SERVER_URL_TEMP:-$SERVER_URL}"
 fi
 
 while [[ $# -gt 0 ]]
