@@ -23,7 +23,7 @@ USAGE=`cat <<EOF
 
                 --interactive|--no-interactive
                         Runs the project in interactive mode
-                        DEFAULT:   --no-interactive
+                        DEFAULT:   --interactive
 
                 -h|--help|--usage
                         Show usage
@@ -68,6 +68,10 @@ showUsage() {
     printf "%s\n\n" "$USAGE"
 }
 
+#                                   VARIABLES
+################################################################################
+################################################################################
+################################################################################
 PWD=`pwd`
 PROJECT_NAME="cilo" # todo: get from git or filestructure
 PIPELINE=()
@@ -83,45 +87,6 @@ DOCKER_IMAGE_NAME="cilo"
 LIBRARY_PATH="lib/"
 LIBRARY_URL=""
 CREDENTIAL_SERVER_URL=""
-
-# VERBOSE="false"
-# INTERACTIVE="true"
-# VVV="false"
-# LOGGING="false"
-# LOGGING_DIRECTORY="log/"
-# DOCKER_SOCKET="/var/run/docker.sock"
-# DOCKER_REGISTRY_URL=""
-# DOCKER_IMAGE_NAME="cilo"
-# LIBRARY_PATH="lib/"
-# LIBRARY_URL=""
-# CREDENTIAL_SERVER_URL=""
-
-getProperty() {
-    cat $1 | grep -i $2 | cut -d'=' -f2- | tr -d '"' | tr -d ' '
-}
-
-getPropertiesFromFile() {
-    local PROP_FILE="$1"
-    if [ -f "$PROP_FILE" ]; then
-        var=(); var=`getProperty "$PROP_FILE" "INTERACTIVE"`;           INTERACTIVE="${var:-$INTERACTIVE}"
-        var=(); var=`getProperty "$PROP_FILE" "VERBOSE"`;               VERBOSE="${var:-$VERBOSE}"
-        var=(); var=`getProperty "$PROP_FILE" "VVV"`;                   VVV="${var:-$VVV}"
-        var=(); var=`getProperty "$PROP_FILE" "LOGGING"`;               LOGGING="${var:-$LOGGING}"
-        var=(); var=`getProperty "$PROP_FILE" "LOGGING_DIRECTORY"`;     LOGGING_DIRECTORY="${var:-$LOGGING_DIRECTORY}"
-        var=(); var=`getProperty "$PROP_FILE" "DOCKER_SOCKET"`;         DOCKER_SOCKET="${var:-$DOCKER_SOCKET}"
-        var=(); var=`getProperty "$PROP_FILE" "DOCKER_REGISTRY_URL"`;   DOCKER_REGISTRY_URL="${var:-$DOCKER_REGISTRY_URL}"
-        var=(); var=`getProperty "$PROP_FILE" "DOCKER_IMAGE_NAME"`;     DOCKER_IMAGE_NAME="${var:-$DOCKER_IMAGE_NAME}"
-        var=(); var=`getProperty "$PROP_FILE" "LIBRARY_PATH"`;          LIBRARY_PATH="${var:-$LIBRARY_PATH}"
-        var=(); var=`getProperty "$PROP_FILE" "LIBRARY_URL"`;           LIBRARY_URL="${var:-$LIBRARY_URL}"
-        var=(); var=`getProperty "$PROP_FILE" "CREDENTIAL_SERVER_URL"`; CREDENTIAL_SERVER_URL="${var:-$CREDENTIAL_SERVER_URL}"
-    fi
-}
-
-getProperties() {
-    getPropertiesFromFile "$PWD/.cilo"
-    getPropertiesFromFile "~/.cilo"
-}
-
 
 while [[ $# -gt 0 ]]
 do
@@ -190,22 +155,58 @@ do
                 showUsage
                 exit 1
             fi
-            PIPELINE+=("$1")
+            if [ -z ${PIPELINE+1} ]; then
+                PIPELINE=("$1")
+            else
+                showUsage
+                exit 1
+            fi
             shift
             ;;
     esac
 done
 set -- "${PIPELINE[@]}" # SETS positional params to just the pipeline
 
+getProperty() {
+    cat $1 | grep -i "^\s*$2\s*=" | tail -n 1 | cut -d'=' -f2- | tr -d '"' | tr -d ' ' | tr -d '\r' | tr -d '\n'
+}
+
+getPropertiesFromFile() {
+    local PROP_FILE="$1"
+    if [ -f "$PROP_FILE" ]; then
+        var=(); var=`getProperty "$PROP_FILE" "INTERACTIVE"`;           INTERACTIVE="${var:-$INTERACTIVE}"
+        var=(); var=`getProperty "$PROP_FILE" "VERBOSE"`;               VERBOSE="${var:-$VERBOSE}"
+        var=(); var=`getProperty "$PROP_FILE" "VVV"`;                   VVV="${var:-$VVV}"
+        var=(); var=`getProperty "$PROP_FILE" "LOGGING"`;               LOGGING="${var:-$LOGGING}"
+        var=(); var=`getProperty "$PROP_FILE" "LOGGING_DIRECTORY"`;     LOGGING_DIRECTORY="${var:-$LOGGING_DIRECTORY}"
+        var=(); var=`getProperty "$PROP_FILE" "DOCKER_SOCKET"`;         DOCKER_SOCKET="${var:-$DOCKER_SOCKET}"
+        var=(); var=`getProperty "$PROP_FILE" "DOCKER_REGISTRY_URL"`;   DOCKER_REGISTRY_URL="${var:-$DOCKER_REGISTRY_URL}"
+        var=(); var=`getProperty "$PROP_FILE" "DOCKER_IMAGE_NAME"`;     DOCKER_IMAGE_NAME="${var:-$DOCKER_IMAGE_NAME}"
+        var=(); var=`getProperty "$PROP_FILE" "LIBRARY_PATH"`;          LIBRARY_PATH="${var:-$LIBRARY_PATH}"
+        var=(); var=`getProperty "$PROP_FILE" "LIBRARY_URL"`;           LIBRARY_URL="${var:-$LIBRARY_URL}"
+        var=(); var=`getProperty "$PROP_FILE" "CREDENTIAL_SERVER_URL"`; CREDENTIAL_SERVER_URL="${var:-$CREDENTIAL_SERVER_URL}"
+    fi
+}
+
+getProperties() {
+    getPropertiesFromFile "$PWD/.cilo/defaults"
+    getPropertiesFromFile "~/.cilo/defaults"
+}
+getProperties
+
 getDateTimeString() {
     date +"%m-%d-%Y-%H-%M-%S" | tr -d '\n\r' | tr -d '\r\n' | tr -d '\n' | tr -d ' '
 }
 
+
+#                                    STARTUP
+################################################################################
+################################################################################
+################################################################################
 if [ -z ${PIPELINE+1} ]; then
     showUsage
     exit 1;
 fi
-
 if $SHOW_VERSION; then
     printf "%s\n" "$VERSION_STRING"
     exit 0
@@ -234,7 +235,10 @@ if $LOGGING; then
     printf "%s\n" "LOGGING INITIATED WITH FILE ($LOGGING_FILE)"
 fi
 
-
+#                                  LOGGING
+################################################################################
+################################################################################
+################################################################################
 logWithTimestampHeading() {
     local timestamp=$INITIAL_TIME
     logWithHeading "$1" "$2" "$timestamp $3: \t "
@@ -312,26 +316,27 @@ if $LOGGING; then
     fi
 fi
 if $VERBOSE; then
+    info "SHOW_VERSION           = %s\n" "${SHOW_VERSION}"
     info "PROJECT_NAME           = %s\n" "${PROJECT_NAME}"
-    info "INTERACTIVE            = %s\n" "${INTERACTIVE}"
     info "PWD                    = %s\n" "${PWD}"
+    info "INTERACTIVE            = %s\n" "${INTERACTIVE}"
     info "VERBOSE                = %s\n" "${VERBOSE}"
     info "VVV                    = %s\n" "${VERBOSE}"
-    info "SHOW_VERSION           = %s\n" "${SHOW_VERSION}"
-    info "DOCKER_SOCKET          = %s\n" "${DOCKER_SOCKET}"
-    info "LIBRARY_PATH           = %s\n" "${LIBRARY_PATH}"
-    info "CREDENTIAL_SERVER_URL  = %s\n" "${CREDENTIAL_SERVER_URL}"
     info "LOGGING                = %s\n" "${LOGGING}"
     info "LOGGING_DIRECTORY      = %s\n" "${LOGGING_DIRECTORY}"
-    info "DOCKER_IMAGE_NAME      = %s\n" "${DOCKER_IMAGE_NAME}"
+    info "DOCKER_SOCKET          = %s\n" "${DOCKER_SOCKET}"
     info "DOCKER_REGISTRY_URL    = %s\n" "${DOCKER_REGISTRY_URL}"
-    info "PIPELINE               = " ""
-    for COMMAND in "${PIPELINE[@]}"; do
-        log "%s " "$COMMAND"
-    done
-    log "\n"
+    info "DOCKER_IMAGE_NAME      = %s\n" "${DOCKER_IMAGE_NAME}"
+    info "LIBRARY_PATH           = %s\n" "${LIBRARY_PATH}"
+    info "LIBRARY_URL            = %s\n" "${LIBRARY_URL}"
+    info "CREDENTIAL_SERVER_URL  = %s\n" "${CREDENTIAL_SERVER_URL}"
+    info "PIPELINE               = %s\n" "${PIPELINE}"
 fi
 
+#                                 FUNCTIONS
+################################################################################
+################################################################################
+################################################################################
 dockerGet() {
     curl -s --unix-socket "$DOCKER_SOCKET" "http:$1" 2>&1
 }
@@ -456,6 +461,10 @@ runProject() {
     dockerRunImage "$imageName" "$PROJECT_NAME"
 }
 
+#                               DEPENDENCIES
+################################################################################
+################################################################################
+################################################################################
 dependencies=`cat << EOF
 pwd
 printf
@@ -469,8 +478,12 @@ docker
 curl
 jq
 EOF`
+
+#                                    MAIN
+################################################################################
+################################################################################
+################################################################################
 doCommandsExist "$dependencies"
-getProperties
 validateDocker
 runProject
 
