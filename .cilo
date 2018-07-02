@@ -1,16 +1,11 @@
-# TOML configuration for Cilo projects
-
-title = "Project Specific .cilo"
-
-[owner]
-user.name="jbfrench"
-
-[cilo]
-project.name="cilo_project"
-logging.directory="log/"
-docker.socket="/var/run/docker.sock"
-docker.registry=""
-docker.image_name="cilo"
-library.path="lib/"
-library.url=""
-server.url=""
+VERBOSE="true"
+INTERACTIVE="true"
+VVV="true"
+LOGGING="false"
+LOGGING_DIRECTORY="log/"
+DOCKER_SOCKET="/var/run/docker.sock"
+DOCKER_REGISTRY_URL=""
+DOCKER_IMAGE_NAME="cilo"
+LIBRARY_PATH="lib/"
+LIBRARY_URL=""
+CREDENTIAL_SERVER_URL=""
