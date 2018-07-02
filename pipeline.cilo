@@ -12,9 +12,10 @@ step "checkout", {
      $ then echo \ # sample comment
      $   "MULTILINE WORKS!"
      $ fi
+     checkout()
      $ echo "PWD: $PWD"
      $ env
-     checkout()
+     
 }
 
 step "build", {

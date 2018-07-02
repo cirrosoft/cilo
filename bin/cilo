@@ -41,6 +41,9 @@ USAGE=`cat <<EOF
                         Write logs to a directory other than log/
                         NOTE:      Must be relative to project with no leading slash and must have a trailing slash.
                         
+                --pull|--rebuild
+                        Rebuilds or pulls latest docker image.
+
                 -r|--registry <image-registry-url>
                         Use to get image from a differenct registry
 
@@ -83,12 +86,39 @@ LOGGING="false"
 LOGGING_DIRECTORY="log/"
 DOCKER_SOCKET="/var/run/docker.sock"
 DOCKER_REGISTRY_URL=""
-DOCKER_IMAGE_NAME="cilo"
+DOCKER_IMAGE_NAME="cirrosoft/cilo"
 DOCKER_REBUILD="false"
 LIBRARY_PATH="lib/"
 LIBRARY_URL=""
 CREDENTIAL_SERVER_URL=""
 
+getProperty() {
+    cat $1 | grep -i "^\s*$2\s*=" | tail -n 1 | cut -d'=' -f2- | tr -d '"' | tr -d ' ' | tr -d '\r' | tr -d '\n'
+}
+
+getPropertiesFromFile() {
+    local PROP_FILE="$1"
+    if [ -f "$PROP_FILE" ]; then
+        var=(); var=`getProperty "$PROP_FILE" "INTERACTIVE"`;           INTERACTIVE="${var:-$INTERACTIVE}"
+        var=(); var=`getProperty "$PROP_FILE" "VERBOSE"`;               VERBOSE="${var:-$VERBOSE}"
+        var=(); var=`getProperty "$PROP_FILE" "VVV"`;                   VVV="${var:-$VVV}"
+        var=(); var=`getProperty "$PROP_FILE" "LOGGING"`;               LOGGING="${var:-$LOGGING}"
+        var=(); var=`getProperty "$PROP_FILE" "LOGGING_DIRECTORY"`;     LOGGING_DIRECTORY="${var:-$LOGGING_DIRECTORY}"
+        var=(); var=`getProperty "$PROP_FILE" "DOCKER_SOCKET"`;         DOCKER_SOCKET="${var:-$DOCKER_SOCKET}"
+        var=(); var=`getProperty "$PROP_FILE" "DOCKER_REGISTRY_URL"`;   DOCKER_REGISTRY_URL="${var:-$DOCKER_REGISTRY_URL}"
+        var=(); var=`getProperty "$PROP_FILE" "DOCKER_IMAGE_NAME"`;     DOCKER_IMAGE_NAME="${var:-$DOCKER_IMAGE_NAME}"
+        var=(); var=`getProperty "$PROP_FILE" "DOCKER_REBUILD"`;        DOCKER_REBUILD="${var:-$DOCKER_REBUILD}"
+        var=(); var=`getProperty "$PROP_FILE" "LIBRARY_PATH"`;          LIBRARY_PATH="${var:-$LIBRARY_PATH}"
+        var=(); var=`getProperty "$PROP_FILE" "LIBRARY_URL"`;           LIBRARY_URL="${var:-$LIBRARY_URL}"
+        var=(); var=`getProperty "$PROP_FILE" "CREDENTIAL_SERVER_URL"`; CREDENTIAL_SERVER_URL="${var:-$CREDENTIAL_SERVER_URL}"
+    fi
+}
+
+getProperties() {
+    getPropertiesFromFile "$PWD/.cilo/config"
+    getPropertiesFromFile "~/.cilo/config"
+}
+getProperties
 
 while [[ $# -gt 0 ]]
 do
@@ -114,6 +144,10 @@ do
         -d|--docker-socket)
             DOCKER_SOCKET="$2"
             shift; shift
+            ;;
+        --rebuild|--pull)
+            DOCKER_REBUILD="true"
+            shift;
             ;;
         -l|--library)
             LIBRARY_PATH="$2"
@@ -168,34 +202,6 @@ do
     esac
 done
 set -- "${PIPELINE[@]}" # SETS positional params to just the pipeline
-
-getProperty() {
-    cat $1 | grep -i "^\s*$2\s*=" | tail -n 1 | cut -d'=' -f2- | tr -d '"' | tr -d ' ' | tr -d '\r' | tr -d '\n'
-}
-
-getPropertiesFromFile() {
-    local PROP_FILE="$1"
-    if [ -f "$PROP_FILE" ]; then
-        var=(); var=`getProperty "$PROP_FILE" "INTERACTIVE"`;           INTERACTIVE="${var:-$INTERACTIVE}"
-        var=(); var=`getProperty "$PROP_FILE" "VERBOSE"`;               VERBOSE="${var:-$VERBOSE}"
-        var=(); var=`getProperty "$PROP_FILE" "VVV"`;                   VVV="${var:-$VVV}"
-        var=(); var=`getProperty "$PROP_FILE" "LOGGING"`;               LOGGING="${var:-$LOGGING}"
-        var=(); var=`getProperty "$PROP_FILE" "LOGGING_DIRECTORY"`;     LOGGING_DIRECTORY="${var:-$LOGGING_DIRECTORY}"
-        var=(); var=`getProperty "$PROP_FILE" "DOCKER_SOCKET"`;         DOCKER_SOCKET="${var:-$DOCKER_SOCKET}"
-        var=(); var=`getProperty "$PROP_FILE" "DOCKER_REGISTRY_URL"`;   DOCKER_REGISTRY_URL="${var:-$DOCKER_REGISTRY_URL}"
-        var=(); var=`getProperty "$PROP_FILE" "DOCKER_IMAGE_NAME"`;     DOCKER_IMAGE_NAME="${var:-$DOCKER_IMAGE_NAME}"
-        var=(); var=`getProperty "$PROP_FILE" "DOCKER_REBUILD"`;        DOCKER_REBUILD="${var:-$DOCKER_REBUILD}"
-        var=(); var=`getProperty "$PROP_FILE" "LIBRARY_PATH"`;          LIBRARY_PATH="${var:-$LIBRARY_PATH}"
-        var=(); var=`getProperty "$PROP_FILE" "LIBRARY_URL"`;           LIBRARY_URL="${var:-$LIBRARY_URL}"
-        var=(); var=`getProperty "$PROP_FILE" "CREDENTIAL_SERVER_URL"`; CREDENTIAL_SERVER_URL="${var:-$CREDENTIAL_SERVER_URL}"
-    fi
-}
-
-getProperties() {
-    getPropertiesFromFile "$PWD/.cilo/config"
-    getPropertiesFromFile "~/.cilo/config"
-}
-getProperties
 
 getDateTimeString() {
     date +"%m-%d-%Y-%H-%M-%S" | tr -d '\n\r' | tr -d '\r\n' | tr -d '\n' | tr -d ' '
@@ -330,6 +336,7 @@ if $VERBOSE; then
     info "DOCKER_SOCKET          = %s\n" "${DOCKER_SOCKET}"
     info "DOCKER_REGISTRY_URL    = %s\n" "${DOCKER_REGISTRY_URL}"
     info "DOCKER_IMAGE_NAME      = %s\n" "${DOCKER_IMAGE_NAME}"
+    info "DOCKER_REBUILD         = %s\n" "${DOCKER_REBUILD}"
     info "LIBRARY_PATH           = %s\n" "${LIBRARY_PATH}"
     info "LIBRARY_URL            = %s\n" "${LIBRARY_URL}"
     info "CREDENTIAL_SERVER_URL  = %s\n" "${CREDENTIAL_SERVER_URL}"
@@ -356,27 +363,44 @@ dockerHasImage() {
     fi
 }
 
+dockerBuildFromMainProject() {
+    if $VERBOSE; then
+        info "%s\n" "Found cilo build script. Building:"
+    fi
+    if $VVV; then
+        $PWD/cilo-scripts/cilo-build-image.sh
+    else
+        $PWD/cilo-scripts/cilo-build-image.sh > /dev/null 2>&1
+    fi
+    if ! [ "$(($?))" -eq "0" ]; then
+        error "Something went wrong with the cilo image build script."
+    fi
+    if $VERBOSE; then
+        info "%s\n" "Built cilo image."
+    fi
+}
+
 dockerCreateImage() {
-    docker pull "$1" > /dev/null 2>&1
-    if ! [[ "$(($?))" -eq "0" ]]; then
+    if $DOCKER_REBUILD; then
         if [ -e "$PWD/cilo-scripts/cilo-build-image.sh" ]; then
-            if $VERBOSE; then
-                info "%s\n" "Found cilo build script. Building:"
-            fi
-            if $VVV; then
-                $PWD/cilo-scripts/cilo-build-image.sh
+            dockerBuildFromMainProject
+        else
+            docker pull "$1" > /dev/null 2>&1
+            if [[ "$(($?))" -eq "0" ]]; then
+                info "%s\n" "Pulled cilo docker image."
             else
-                $PWD/cilo-scripts/cilo-build-image.sh > /dev/null 2>&1
-            fi
-            if ! [ "$(($?))" -eq "0" ]; then
-                error "Something went wrong with the cilo image build script."
-            fi
-            if $VERBOSE; then
-                info "%s\n" "Built cilo image."
+                error "%s\n" "Failed to pull cilo docker image."
             fi
         fi
     else
-        info "%s\n" "Pulled cilo docker image."
+        docker pull "$1" > /dev/null 2>&1
+        if [[ "$(($?))" -eq "0" ]]; then
+            info "%s\n" "Pulled cilo docker image."
+        else
+            if [ -e "$PWD/cilo-scripts/cilo-build-image.sh" ]; then
+                dockerBuildFromMainProject
+            fi
+        fi
     fi
 }
 
