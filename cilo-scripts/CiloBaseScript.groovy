@@ -36,8 +36,21 @@ abstract class CiloBaseScript extends Script {
         
     }
 
+    def ciloShellScript(filename) {
+        // file = new File(filename)
+        // linumLine = file.readLines().get(2)
+        // print linumLine
+        shell("chmod 777 $filename")
+        shell("$filename")
+    }
+    
     def shell(command) {
         // TODO: write shell command
+        def sout = new StringBuilder(), serr = new StringBuilder()
+        def proc = command.execute()
+        proc.consumeProcessOutput(sout, serr)
+        proc.waitForOrKill(1000)
+        print "$sout"
     }
 
     def step(name, closure) {

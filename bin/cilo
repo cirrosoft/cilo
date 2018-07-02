@@ -84,9 +84,11 @@ LOGGING_DIRECTORY="log/"
 DOCKER_SOCKET="/var/run/docker.sock"
 DOCKER_REGISTRY_URL=""
 DOCKER_IMAGE_NAME="cilo"
+DOCKER_REBUILD="false"
 LIBRARY_PATH="lib/"
 LIBRARY_URL=""
 CREDENTIAL_SERVER_URL=""
+
 
 while [[ $# -gt 0 ]]
 do
@@ -182,6 +184,7 @@ getPropertiesFromFile() {
         var=(); var=`getProperty "$PROP_FILE" "DOCKER_SOCKET"`;         DOCKER_SOCKET="${var:-$DOCKER_SOCKET}"
         var=(); var=`getProperty "$PROP_FILE" "DOCKER_REGISTRY_URL"`;   DOCKER_REGISTRY_URL="${var:-$DOCKER_REGISTRY_URL}"
         var=(); var=`getProperty "$PROP_FILE" "DOCKER_IMAGE_NAME"`;     DOCKER_IMAGE_NAME="${var:-$DOCKER_IMAGE_NAME}"
+        var=(); var=`getProperty "$PROP_FILE" "DOCKER_REBUILD"`;        DOCKER_REBUILD="${var:-$DOCKER_REBUILD}"
         var=(); var=`getProperty "$PROP_FILE" "LIBRARY_PATH"`;          LIBRARY_PATH="${var:-$LIBRARY_PATH}"
         var=(); var=`getProperty "$PROP_FILE" "LIBRARY_URL"`;           LIBRARY_URL="${var:-$LIBRARY_URL}"
         var=(); var=`getProperty "$PROP_FILE" "CREDENTIAL_SERVER_URL"`; CREDENTIAL_SERVER_URL="${var:-$CREDENTIAL_SERVER_URL}"
@@ -189,8 +192,8 @@ getPropertiesFromFile() {
 }
 
 getProperties() {
-    getPropertiesFromFile "$PWD/.cilo/defaults"
-    getPropertiesFromFile "~/.cilo/defaults"
+    getPropertiesFromFile "$PWD/.cilo/config"
+    getPropertiesFromFile "~/.cilo/config"
 }
 getProperties
 
@@ -356,14 +359,14 @@ dockerHasImage() {
 dockerCreateImage() {
     docker pull "$1" > /dev/null 2>&1
     if ! [[ "$(($?))" -eq "0" ]]; then
-        if [ -e "$PWD/build-cilo-image.sh" ]; then
+        if [ -e "$PWD/cilo-scripts/cilo-build-image.sh" ]; then
             if $VERBOSE; then
                 info "%s\n" "Found cilo build script. Building:"
             fi
             if $VVV; then
-                $PWD/build-cilo-image.sh
+                $PWD/cilo-scripts/cilo-build-image.sh
             else
-                $PWD/build-cilo-image.sh > /dev/null 2>&1
+                $PWD/cilo-scripts/cilo-build-image.sh > /dev/null 2>&1
             fi
             if ! [ "$(($?))" -eq "0" ]; then
                 error "Something went wrong with the cilo image build script."
@@ -451,6 +454,9 @@ doCommandsExist() {
 
 runProject() {
     local imageName="$DOCKER_IMAGE_NAME"
+    if $DOCKER_REBUILD; then
+        dockerCreateImage "$imageName"
+    fi
     if ! dockerHasImage "$imageName"; then
         dockerCreateImage "$imageName"
         if ! dockerHasImage "$imageName"; then

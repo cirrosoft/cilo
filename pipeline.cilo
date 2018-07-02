@@ -3,14 +3,27 @@ def checkout() {
 }
 
 step "checkout", {
+     $ echo "HELLO SHELL"
+     $ if true; then
+     $   echo "IF CONDITION WORKS!"
+     $ fi
+     $ if \
+     $ true;
+     $ then echo \ # sample comment
+     $   "MULTILINE WORKS!"
+     $ fi
+     $ echo "PWD: $PWD"
+     $ env
      checkout()
-     // $ open-ssl enc -d aes-256-cbc
 }
 
 step "build", {
      println "BUILDING"
+     $ echo 'second script with single quotes.'
+     $ echo 'line 2'
 }
 
 step "test", {
      println "TESTING"
 }
+
