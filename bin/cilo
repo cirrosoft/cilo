@@ -5,6 +5,10 @@ USAGE=`cat <<EOF
 
            USAGE
                 cilo [OPTIONS] <pipeline>
+                cilo help [command]
+                cilo secret list
+                cilo secret (create|read|update) <name> (input|file|string) [data]
+                cilo secret delete
                 cilo --version
 
            DESCRIPTION
@@ -67,30 +71,17 @@ USAGE=`cat <<EOF
 
 EOF`
 
+#                                   HELPERS
+################################################################################
+################################################################################
+################################################################################
 showUsage() {
     printf "%s\n\n" "$USAGE"
 }
 
-#                                   VARIABLES
-################################################################################
-################################################################################
-################################################################################
-PWD=`pwd`
-PROJECT_NAME="cilo" # todo: get from git or filestructure
-PIPELINE=()
-SHOW_VERSION="false"
-INTERACTIVE="true"
-VERBOSE="false"
-VVV="false"
-LOGGING="false"
-LOGGING_DIRECTORY="log/"
-DOCKER_SOCKET="/var/run/docker.sock"
-DOCKER_REGISTRY_URL=""
-DOCKER_IMAGE_NAME="cirrosoft/cilo"
-DOCKER_REBUILD="false"
-LIBRARY_PATH="lib/"
-LIBRARY_URL=""
-CREDENTIAL_SERVER_URL=""
+getDateTimeString() {
+    date +"%m-%d-%Y-%H-%M-%S" | tr -d '\n\r' | tr -d '\r\n' | tr -d '\n' | tr -d ' '
+}
 
 getProperty() {
     cat $1 | grep -i "^\s*$2\s*=" | tail -n 1 | cut -d'=' -f2- | tr -d '"' | tr -d ' ' | tr -d '\r' | tr -d '\n'
@@ -118,6 +109,81 @@ getProperties() {
     getPropertiesFromFile "$PWD/.cilo/config"
     getPropertiesFromFile "~/.cilo/config"
 }
+
+helpCommand() {
+    case $1 in
+        secret)
+            echo "Help for a secret to be added."
+            ;;
+    esac
+    exit 0
+}
+
+prepareSecretDirectory() {
+    if ! [ -d "$HOME/.cilo/secret" ]; then
+        mkdir -p "$HOME/.cilo/secret"
+    fi
+}
+
+listSecretDirectory() {
+    for filename in $HOME/.cilo/secret/*; do
+        basename $filename
+    done
+}
+
+secretCommand() {
+    case $1 in
+        list)
+            listSecretDirectory
+            ;;
+        create)
+            name=$2
+            type=$3
+            echo "Adding key"
+            prepareSecretDirectory
+            ;;
+        read)
+            name=$2
+            echo "Reading key"
+            prepareSecretDirectory
+            ;;
+        update)
+            name=$2
+            type=$3
+            echo "Updating key"
+            prepareSecretDirectory
+            ;;
+        delete)
+            name=$2
+            echo "Deleting key"
+            prepareSecretDirectory
+            ;;
+    esac
+    exit 0
+}
+
+#                                   STARTUP
+################################################################################
+################################################################################
+################################################################################
+PWD=`pwd`
+PROJECT_NAME="cilo" # todo: get from git or filestructure
+PIPELINE=()
+COMMANDS=()
+SHOW_VERSION="false"
+INTERACTIVE="true"
+VERBOSE="false"
+VVV="false"
+LOGGING="false"
+LOGGING_DIRECTORY="log/"
+DOCKER_SOCKET="/var/run/docker.sock"
+DOCKER_REGISTRY_URL=""
+DOCKER_IMAGE_NAME="cirrosoft/cilo"
+DOCKER_REBUILD="false"
+LIBRARY_PATH="lib/"
+LIBRARY_URL=""
+CREDENTIAL_SERVER_URL=""
+
 getProperties
 
 while [[ $# -gt 0 ]]
@@ -186,11 +252,22 @@ do
             shift; shift;
             ;;
         *)
+            # UNKNOWN ARGS
             if [[ $key == -* ]]; then
                 printf "\n\t%s\n" "ERROR: Unknown option ($key)."
                 showUsage
                 exit 1
             fi
+            # COMMANDS
+            if [ "$1" = "help" ]; then
+                shift;
+                helpCommand $@
+            fi
+            if [ "$1" = "secret" ]; then
+                shift;
+                secretCommand $@
+            fi
+            # PIPELNIE
             if [ -z ${PIPELINE+1} ]; then
                 PIPELINE=("$1")
             else
@@ -203,15 +280,6 @@ do
 done
 set -- "${PIPELINE[@]}" # SETS positional params to just the pipeline
 
-getDateTimeString() {
-    date +"%m-%d-%Y-%H-%M-%S" | tr -d '\n\r' | tr -d '\r\n' | tr -d '\n' | tr -d ' '
-}
-
-
-#                                    STARTUP
-################################################################################
-################################################################################
-################################################################################
 if [ -z ${PIPELINE+1} ]; then
     showUsage
     exit 1;
@@ -220,6 +288,11 @@ if $SHOW_VERSION; then
     printf "%s\n" "$VERSION_STRING"
     exit 0
 fi
+
+#                                  LOGGING
+################################################################################
+################################################################################
+################################################################################
 INITIAL_TIME=`getDateTimeString`
 LOGGING_FILE="$PWD/$LOGGING_DIRECTORY""cilo-""$INITIAL_TIME.txt"
 if $LOGGING; then
@@ -243,11 +316,6 @@ if $LOGGING; then
     fi
     printf "%s\n" "LOGGING INITIATED WITH FILE ($LOGGING_FILE)"
 fi
-
-#                                  LOGGING
-################################################################################
-################################################################################
-################################################################################
 logWithTimestampHeading() {
     local timestamp=$INITIAL_TIME
     logWithHeading "$1" "$2" "$timestamp $3: \t "
@@ -289,27 +357,27 @@ error() {
     logWithTimestampHeading "$1" "$2" "ERROR"
 }
 
-runCommand() {
-    shouldreturn="false"
-    if [ "$1" = "-r" ]; then
-        shift;
-        shouldreturn="true"
-    fi
-    if $VERBOSE; then
-        info "Running command (%s).\n" $@
-        if $VVV; then
-            $@
-        else
-            RESULT=`$@`
-            if $shouldreturn; then
-                printf "%s" "$RESULT"
-            fi
-        fi
-        if ! [[ "$(($?))" -eq "0" ]]; then
-            warn "Command($1 $2...) returned in error:\n%s\n" "$RESULT"
-        fi
-    fi
-}
+# runCommand() {
+#     shouldreturn="false"
+#     if [ "$1" = "-r" ]; then
+#         shift;
+#         shouldreturn="true"
+#     fi
+#     if $VERBOSE; then
+#         info "Running command (%s).\n" $@
+#         if $VVV; then
+#             $@
+#         else
+#             RESULT=`$@`
+#             if $shouldreturn; then
+#                 printf "%s" "$RESULT"
+#             fi
+#         fi
+#         if ! [[ "$(($?))" -eq "0" ]]; then
+#             warn "Command($1 $2...) returned in error:\n%s\n" "$RESULT"
+#         fi
+#     fi
+# }
 
 if $LOGGING; then
     if [ -d "$PWD/.git" ]; then

@@ -15,7 +15,6 @@ step "checkout", {
      checkout()
      $ echo "PWD: $PWD"
      $ env
-     
 }
 
 step "build", {
