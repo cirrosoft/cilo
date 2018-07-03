@@ -14,7 +14,7 @@ BEGIN {
     } else {
         if ( length(script) > 0 ) {
             i++
-            filename="/home/groovy/cilo/tmp/script" i ".sh"
+            filename="/home/cilo/tmp/script" i ".sh"
             print "#!/usr/bin/env sh" "\n" "# script from line number " linum " of original file. \n" script >> filename
             print "ciloShellScript('''" filename "''');";
         }

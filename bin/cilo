@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
-VERSION_NUMBER="1.0"
-VERSION_STRING=$'Cilo\t(Unix)\t'"$VERSION_NUMBER"
-USAGE=`cat <<EOF
+
+main() {
+    VERSION_NUMBER="1.0"
+    VERSION_STRING=$'Cilo\t(Unix)\t'"$VERSION_NUMBER"
+    USAGE=`cat <<EOF
 
            USAGE
-                cilo [OPTIONS] <pipeline>
-                cilo help [command]
-                cilo secret list
-                cilo secret (create|read|update) <name> (input|file|string) [data]
-                cilo secret delete
-                cilo --version
+                cilo [OPTIONS] run <pipeline>
+                cilo [OPTIONS] help [command] [subcommand]
+                cilo [OPTIONS] version
+                cilo [OPTIONS] shell
+                cilo [OPTIONS] secret
 
            DESCRIPTION
                 Cilo is a decentralized CI/CD build tool. It uses a local docker container to isolate builds while loading secrets from a cilo server credential store.
@@ -45,7 +46,7 @@ USAGE=`cat <<EOF
                         Write logs to a directory other than log/
                         NOTE:      Must be relative to project with no leading slash and must have a trailing slash.
                         
-                --pull|--rebuild
+                --pull
                         Rebuilds or pulls latest docker image.
 
                 -r|--registry <image-registry-url>
@@ -62,22 +63,360 @@ USAGE=`cat <<EOF
 
                 -vvv
                         Extra verbose...to the point of debug.
-                        
-                --version
-                        Shows Cilo version number. 
-                        OUTPUT:    Cilo    (<operating-system>)    <major-version>.<minor-version>.[release]:[tag]
-                        NOTE:      Fields are tab delimited for using 'cut -fn'.
-                        
 
-EOF`
+                        EOF`
 
-#                                   HELPERS
-################################################################################
-################################################################################
-################################################################################
+    PWD=`pwd`
+    PROJECT_NAME="cilo" # todo: get from git or filestructure
+    PIPELINE=()
+    COMMAND=()
+    INTERACTIVE="true"
+    VERBOSE="false"
+    VVV="false"
+    LOGGING="false"
+    LOGGING_DIRECTORY="log/"
+    DOCKER_SOCKET="/var/run/docker.sock"
+    DOCKER_REGISTRY_URL=""
+    DOCKER_IMAGE_NAME="cirrosoft/cilo"
+    DOCKER_REBUILD="false"
+    LIBRARY_PATH="lib/"
+    LIBRARY_URL=""
+    CREDENTIAL_SERVER_URL=""
+
+    CILO_TEMP_DIRECTORY="$HOME/.cilo/tmp"
+    CILO_SECRET_DIRECTORY="$HOME/.cilo/secret"
+
+    parseConfig
+    parseArgs $@ # can spin off to different command and exit
+
+    logInit
+    computeDependencies
+    
+    executeCommand $COMMAND
+}
+
 showUsage() {
     printf "%s\n\n" "$USAGE"
 }
+
+parseConfig() {
+    getPropertiesFromFile "$PWD/.cilo/config"
+    getPropertiesFromFile "~/.cilo/config"
+}
+
+parseArgs() {
+    while [[ $# -gt 0 ]]
+    do
+        key="$1"
+        case $key in
+            -h|--help|--usage)
+                showUsage
+                exit 0
+                ;;
+            -v|--verbose)
+                VERBOSE="true"
+                shift;
+                ;;
+            -vvv)
+                VERBOSE="true"
+                VVV="true"
+                shift;
+                ;;
+            -d|--docker-socket)
+                DOCKER_SOCKET="$2"
+                shift; shift
+                ;;
+            --pull)
+                DOCKER_REBUILD="true"
+                shift;
+                ;;
+            -l|--library)
+                LIBRARY_PATH="$2"
+                shift; shift
+                ;;
+            -u|--url-library)
+                LIBRARY_URL="$2"
+                shift; shift;
+                ;;
+            -s|--server)
+                CREDENTIAL_SERVER_URL="$2"
+                shift; shift
+                ;;
+            --log)
+                LOGGING="true"
+                shift;
+                ;;
+            --log-directory)
+                LOGGING_DIRECTORY="$2"
+                shift; shift;
+                ;;
+            --interactive)
+                INTERACTIVE="true"
+                shift;
+                ;;
+            --no-interactive)
+                INTERACTIVE="false"
+                shift;
+                ;;
+            --i|--image)
+                DOCKER_IMAGE_NAME="$2"
+                shift; shift
+                ;;
+            -r|--registry)
+                DOCKER_REGISTRY_URL="$2"
+                shift; shift;
+                ;;
+            -*)
+                printf "\n\t%s\n" "ERROR: Unknown option ($key)."
+                showUsage
+                exit 1
+                shift;
+                ;;
+            *)
+                COMMAND=$@
+                break;
+                ;;
+        esac
+    done
+    set -- "${COMMAND[@]}" # SETS positional params to just the pipeline
+}
+
+computeDependencies() {
+    dependencies=`cat << EOF
+    pwd
+    printf
+    cat
+    tee
+    grep
+    sed
+    awk
+    tr
+    docker
+    curl
+    jq
+EOF`
+    doBinariesExist "$dependencies"
+}
+
+executeCommand() {
+    if [ "$1" = "version" ]; then
+        shift;
+        versionCommand $@
+    fi
+    if [ "$1" = "help" ]; then
+        shift;
+        helpCommand $@
+    fi
+    if [ "$1" = "shell" ]; then
+        shift;
+        shellCommand $@
+    fi
+    if [ "$1" = "secret" ]; then
+        shift;
+        secretCommand $@
+    fi
+    if [ "$1" = "run" ]; then
+        shift;
+        runCommand $@
+    fi
+    showUsage
+    exit 1
+}
+
+runCommand() {
+    PIPELINE=$1
+    if [ -z ${PIPELINE+1} ]; then
+        showUsage
+        exit 1
+    fi
+    validateDocker
+    runCiloScript "cilo-run-pipeline"
+    exit 0
+}
+
+helpCommand() {
+    case $1 in
+        secret)
+            echo "Help for a secret to be added."
+            ;;
+    esac
+    exit 0
+}
+
+versionCommand() {
+    printf "%s\n" "$VERSION_STRING"
+    exit 0
+}
+
+shellCommand() {
+    validateDocker
+    runCiloScript "bash"
+    exit 0
+}
+
+showSecretUsage() {
+    showUsage
+}
+
+secretGetString() {
+    touch "$CILO_TEMP_DIRECTORY/$1" > /dev/null 2> /dev/null
+    echo "$2" > "$CILO_TEMP_DIRECTORY/$1" 2> /dev/null
+}
+
+secretGetFile() {
+    if ! [ -e "$2" ]; then
+        error "File ($2) for secret ($1) does not exist."
+        exit 1;
+    fi
+    touch "$CILO_TEMP_DIRECTORY/$1" > /dev/null 2> /dev/null
+    cp "$2" "$CILO_TEMP_DIRECTORY/$1" > /dev/null 2> /dev/null
+}
+
+secretGetInput() {
+    touch "$CILO_TEMP_DIRECTORY/$1" > /dev/null 2> /dev/null
+    IFS= read -t 0.01 -r -d '' indata
+    [[ -n $indata ]] && printf "%s" "$indata" > "$CILO_TEMP_DIRECTORY/$1"
+}
+
+secretCommand() {
+    case $1 in
+        list)
+            listSecretDirectory
+            ;;
+        create)
+            name=$2
+            type=$3
+            value=$4
+            if [ -z "${name+1}" ]; then
+                showSecretUsage
+            fi
+            case $type in
+                string)
+                    string="$value"
+                    if [ -z "${string+1}" ]; then
+                        showSecretUsage
+                    fi
+                    secretGetString "$name" "$value"
+                    ;;
+                file)
+                    file="$value"
+                    if [ -z "${file+1}" ]; then
+                        showSecretUsage
+                    fi
+                    secretGetFile "$name" "$value"
+                    ;;
+                input)
+                    secretGetInput "$name" "$value"
+                    ;;
+                *)
+                    showSecretUsage
+            esac
+            prepareSecretDirectory
+            secretCommandCreate "$name"
+            ;;
+        read)
+            name=$2
+            prepareSecretDirectory
+            secretCommandRead "$name"
+            ;;
+        update)
+            name=$2
+            type=$3
+            value=$4
+            if [ -z "${name+1}" ]; then
+                showSecretUsage
+            fi
+            case $type in
+                string)
+                    string="$value"
+                    if [ -z "${string+1}" ]; then
+                        showSecretUsage
+                    fi
+                    secretGetString "$name" "$value"
+                    ;;
+                file)
+                    file="$value"
+                    if [ -z "${file+1}" ]; then
+                        showSecretUsage
+                    fi
+                    secretGetFile "$name" "$value"
+                    ;;
+                input)
+                    secretGetInput "$name" "$value"
+                    ;;
+                *)
+                    showSecretUsage
+            esac
+            prepareSecretDirectory
+            secretCommandUpdate "$name"
+            ;;
+        delete)
+            name=$2
+            prepareSecretDirectory
+            secretCommandDelete "$name"
+            ;;
+    esac
+    exit 0
+}
+
+secretCommandCreate() {
+    name="$1"
+    localfilename="$CILO_TEMP_DIRECTORY/$name"
+    mountTemp="/home/cilo/tmp"
+    if [ -e "$CILO_SECRET_DIRECTORY/$name" ]; then
+        error "%s\n" "Secret by the name of ($name) already exists."
+        exit 1;
+    fi
+    if ! [ -e "$localfilename" ]; then
+        error "%s\n" "Secret by the name of ($name) does not have a binary file ($localfilename) to load."
+        exit 1;
+    fi
+    runCiloBash "cat $mountTemp/$name | openssl enc -a -aes-256-cbc > $mountTemp/$name.enc"
+    cat "$localfilename.enc" > "$CILO_SECRET_DIRECTORY/$name"
+    log "%s\n" "Secret Added ($name)."
+}
+
+secretCommandRead() {
+    name="$1"
+    filename="$CILO_SECRET_DIRECTORY/$name"
+    mountTemp="/home/cilo/tmp"
+    if ! [ -e "$filename" ]; then
+        error "%s\n" "Secret by the name of ($name) does not exist."
+        exit 1;
+    fi
+    cp "$filename" "$CILO_TEMP_DIRECTORY/$name"
+    runCiloBash "cat $mountTemp/$name | openssl enc -a -d -aes-256-cbc"
+}
+
+secretCommandUpdate() {
+    name="$1"
+    localfilename="$CILO_TEMP_DIRECTORY/$name"
+    mountTemp="/home/cilo/tmp"
+    if ! [ -e "$CILO_SECRET_DIRECTORY/$name" ]; then
+        error "%s\n" "Secret by the name of ($name) does not exists."
+        exit 1;
+    fi
+    if ! [ -e "$localfilename" ]; then
+        error "%s\n" "Secret by the name of ($name) does not have a binary file ($localfilename) to load."
+        exit 1;
+    fi
+    runCiloBash "cat $mountTemp/$name | openssl enc -a -aes-256-cbc > $mountTemp/$name.enc"
+    cat "$localfilename.enc" > "$CILO_SECRET_DIRECTORY/$name"
+    log "%s\n" "Secret updated ($name)."
+}
+
+secretCommandDelete() {
+    name="$1"
+    filename="$CILO_SECRET_DIRECTORY/$name"
+    mountTemp="/home/cilo/tmp"
+    if ! [ -e "$filename" ]; then
+        error "%s\n" "Secret by the name of ($name) does not exist."
+        exit 1;
+    fi
+    rm "$filename"
+    echo "Secret ($name) deleted."
+}
+
 
 getDateTimeString() {
     date +"%m-%d-%Y-%H-%M-%S" | tr -d '\n\r' | tr -d '\r\n' | tr -d '\n' | tr -d ' '
@@ -105,217 +444,80 @@ getPropertiesFromFile() {
     fi
 }
 
-getProperties() {
-    getPropertiesFromFile "$PWD/.cilo/config"
-    getPropertiesFromFile "~/.cilo/config"
-}
 
-helpCommand() {
-    case $1 in
-        secret)
-            echo "Help for a secret to be added."
-            ;;
-    esac
-    exit 0
-}
 
 prepareSecretDirectory() {
-    if ! [ -d "$HOME/.cilo/secret" ]; then
-        mkdir -p "$HOME/.cilo/secret"
+    if ! [ -d "$CILO_TEMP_DIRECTORY" ]; then
+        mkdir -p "$CILO_TEMP_DIRECTORY"
+    fi
+    if ! [ -d "$CILO_SECRET_DIRECTORY" ]; then
+        mkdir -p "$CILO_SECRET_DIRECTORY"
     fi
 }
 
 listSecretDirectory() {
-    for filename in $HOME/.cilo/secret/*; do
+    for filename in $CILO_SECRET_DIRECTORY/*; do
         basename $filename
     done
 }
 
-secretCommand() {
-    case $1 in
-        list)
-            listSecretDirectory
-            ;;
-        create)
-            name=$2
-            type=$3
-            echo "Adding key"
-            prepareSecretDirectory
-            ;;
-        read)
-            name=$2
-            echo "Reading key"
-            prepareSecretDirectory
-            ;;
-        update)
-            name=$2
-            type=$3
-            echo "Updating key"
-            prepareSecretDirectory
-            ;;
-        delete)
-            name=$2
-            echo "Deleting key"
-            prepareSecretDirectory
-            ;;
-    esac
-    exit 0
+
+logInit() {
+    INITIAL_TIME=`getDateTimeString`
+    LOGGING_FILE="$PWD/$LOGGING_DIRECTORY""cilo-""$INITIAL_TIME.txt"
+    if $LOGGING; then
+        if ! [ -d "$PWD/$LOGGING_DIRECTORY" ]; then
+            mkdir -p "$PWD/$LOGGING_DIRECTORY" 1> /dev/null 2> /dev/null
+            if ! [ "$(($?))" -eq "0" ]; then
+                printf "%s\n" "Logging failed to initialize. Could not create directory ($LOGGING_DIRECTORY)."
+                exit 1
+            fi
+            if ! [ "$?" -eq "0" ]; then
+                printf "%s\n" "Logging failed to initialize. Directory malformed ($LOGGING_DIRECTORY)."
+                exit 1
+            fi
+        fi
+        if ! [ -e "$LOGGING_FILE" ]; then
+            touch "$LOGGING_FILE" 1> /dev/null 2> /dev/null
+            if ! [ "$?" -eq "0" ]; then
+                printf "%s\n" "Logging failed to initialize. Log file could not be created ($LOGGING_FILE)."
+                exit 1
+            fi
+        fi
+        printf "%s\n" "LOGGING INITIATED WITH FILE ($LOGGING_FILE)"
+    fi
+    if $LOGGING; then
+        if [ -d "$PWD/.git" ]; then
+            if ! [ -e "$PWD/.gitignore" ]; then
+                info "%s\n" "Git is present and no ignore file is found. Adding ignore file."
+                touch ".gitignore" 1> /dev/null 2> /dev/null
+            fi
+            logIgnoreCount=`cat "$PWD/.gitignore" | grep "log\/" | wc -l | tr -d ' '`
+            if [ "$((logIgnoreCount))" -eq "0" ]; then
+                info "%s\n" "Git ignore is present (.gitignore) and cilo logs are not ignored yet. Adding ignore line to .gitignore."
+                printf "# ------- CILO ---------\n%s\n" 'log/' >> "$PWD/.gitignore"
+            fi
+        fi
+    fi
+    if $VERBOSE; then
+        info "PROJECT_NAME           = %s\n" "${PROJECT_NAME}"
+        info "PWD                    = %s\n" "${PWD}"
+        info "INTERACTIVE            = %s\n" "${INTERACTIVE}"
+        info "VERBOSE                = %s\n" "${VERBOSE}"
+        info "VVV                    = %s\n" "${VERBOSE}"
+        info "LOGGING                = %s\n" "${LOGGING}"
+        info "LOGGING_DIRECTORY      = %s\n" "${LOGGING_DIRECTORY}"
+        info "DOCKER_SOCKET          = %s\n" "${DOCKER_SOCKET}"
+        info "DOCKER_REGISTRY_URL    = %s\n" "${DOCKER_REGISTRY_URL}"
+        info "DOCKER_IMAGE_NAME      = %s\n" "${DOCKER_IMAGE_NAME}"
+        info "DOCKER_REBUILD         = %s\n" "${DOCKER_REBUILD}"
+        info "LIBRARY_PATH           = %s\n" "${LIBRARY_PATH}"
+        info "LIBRARY_URL            = %s\n" "${LIBRARY_URL}"
+        info "CREDENTIAL_SERVER_URL  = %s\n" "${CREDENTIAL_SERVER_URL}"
+        info "COMMAND                = %s\n" "${COMMAND}"
+    fi
 }
 
-#                                   STARTUP
-################################################################################
-################################################################################
-################################################################################
-PWD=`pwd`
-PROJECT_NAME="cilo" # todo: get from git or filestructure
-PIPELINE=()
-COMMANDS=()
-SHOW_VERSION="false"
-INTERACTIVE="true"
-VERBOSE="false"
-VVV="false"
-LOGGING="false"
-LOGGING_DIRECTORY="log/"
-DOCKER_SOCKET="/var/run/docker.sock"
-DOCKER_REGISTRY_URL=""
-DOCKER_IMAGE_NAME="cirrosoft/cilo"
-DOCKER_REBUILD="false"
-LIBRARY_PATH="lib/"
-LIBRARY_URL=""
-CREDENTIAL_SERVER_URL=""
-
-getProperties
-
-while [[ $# -gt 0 ]]
-do
-    key="$1"
-    case $key in
-        -h|--help|--usage)
-            showUsage
-            exit 0
-            ;;
-        -v|--verbose)
-            VERBOSE="true"
-            shift;
-            ;;
-        -vvv)
-            VERBOSE="true"
-            VVV="true"
-            shift;
-            ;;
-        --version)
-            SHOW_VERSION="true"
-            shift;
-            ;;
-        -d|--docker-socket)
-            DOCKER_SOCKET="$2"
-            shift; shift
-            ;;
-        --rebuild|--pull)
-            DOCKER_REBUILD="true"
-            shift;
-            ;;
-        -l|--library)
-            LIBRARY_PATH="$2"
-            shift; shift
-            ;;
-        -u|--url-library)
-            LIBRARY_URL="$2"
-            shift; shift;
-            ;;
-        -s|--server)
-            CREDENTIAL_SERVER_URL="$2"
-            shift; shift
-            ;;
-        --log)
-            LOGGING="true"
-            shift;
-            ;;
-        --log-directory)
-            LOGGING_DIRECTORY="$2"
-            shift; shift;
-            ;;
-        --interactive)
-            INTERACTIVE="true"
-            shift;
-            ;;
-        --no-interactive)
-            INTERACTIVE="false"
-            shift;
-            ;;
-        --i|--image)
-            DOCKER_IMAGE_NAME="$2"
-            shift; shift
-            ;;
-        -r|--registry)
-            DOCKER_REGISTRY_URL="$2"
-            shift; shift;
-            ;;
-        *)
-            # UNKNOWN ARGS
-            if [[ $key == -* ]]; then
-                printf "\n\t%s\n" "ERROR: Unknown option ($key)."
-                showUsage
-                exit 1
-            fi
-            # COMMANDS
-            if [ "$1" = "help" ]; then
-                shift;
-                helpCommand $@
-            fi
-            if [ "$1" = "secret" ]; then
-                shift;
-                secretCommand $@
-            fi
-            # PIPELNIE
-            if [ -z ${PIPELINE+1} ]; then
-                PIPELINE=("$1")
-            else
-                showUsage
-                exit 1
-            fi
-            shift
-            ;;
-    esac
-done
-set -- "${PIPELINE[@]}" # SETS positional params to just the pipeline
-
-if [ -z ${PIPELINE+1} ]; then
-    showUsage
-    exit 1;
-fi
-if $SHOW_VERSION; then
-    printf "%s\n" "$VERSION_STRING"
-    exit 0
-fi
-
-#                                  LOGGING
-################################################################################
-################################################################################
-################################################################################
-INITIAL_TIME=`getDateTimeString`
-LOGGING_FILE="$PWD/$LOGGING_DIRECTORY""cilo-""$INITIAL_TIME.txt"
-if $LOGGING; then
-    if ! [ -d "$PWD/$LOGGING_DIRECTORY" ]; then
-        mkdir -p "$PWD/$LOGGING_DIRECTORY" 1> /dev/null 2> /dev/null
-        if ! [ "$(($?))" -eq "0" ]; then
-            printf "%s\n" "Logging failed to initialize. Could not create directory ($LOGGING_DIRECTORY)."
-            exit 1
-        fi
-        if ! [ "$?" -eq "0" ]; then
-            printf "%s\n" "Logging failed to initialize. Directory malformed ($LOGGING_DIRECTORY)."
-            exit 1
-        fi
-    fi
-    if ! [ -e "$LOGGING_FILE" ]; then
-        touch "$LOGGING_FILE" 1> /dev/null 2> /dev/null
-        if ! [ "$?" -eq "0" ]; then
-            printf "%s\n" "Logging failed to initialize. Log file could not be created ($LOGGING_FILE)."
-            exit 1
-        fi
-    fi
-    printf "%s\n" "LOGGING INITIATED WITH FILE ($LOGGING_FILE)"
-fi
 logWithTimestampHeading() {
     local timestamp=$INITIAL_TIME
     logWithHeading "$1" "$2" "$timestamp $3: \t "
@@ -357,156 +559,6 @@ error() {
     logWithTimestampHeading "$1" "$2" "ERROR"
 }
 
-# runCommand() {
-#     shouldreturn="false"
-#     if [ "$1" = "-r" ]; then
-#         shift;
-#         shouldreturn="true"
-#     fi
-#     if $VERBOSE; then
-#         info "Running command (%s).\n" $@
-#         if $VVV; then
-#             $@
-#         else
-#             RESULT=`$@`
-#             if $shouldreturn; then
-#                 printf "%s" "$RESULT"
-#             fi
-#         fi
-#         if ! [[ "$(($?))" -eq "0" ]]; then
-#             warn "Command($1 $2...) returned in error:\n%s\n" "$RESULT"
-#         fi
-#     fi
-# }
-
-if $LOGGING; then
-    if [ -d "$PWD/.git" ]; then
-        if ! [ -e "$PWD/.gitignore" ]; then
-            info "%s\n" "Git is present and no ignore file is found. Adding ignore file."
-            touch ".gitignore" 1> /dev/null 2> /dev/null
-        fi
-        logIgnoreCount=`cat "$PWD/.gitignore" | grep "log\/" | wc -l | tr -d ' '`
-        if [ "$((logIgnoreCount))" -eq "0" ]; then
-            info "%s\n" "Git ignore is present (.gitignore) and cilo logs are not ignored yet. Adding ignore line to .gitignore."
-            printf "# ------- CILO ---------\n%s\n" 'log/' >> "$PWD/.gitignore"
-        fi
-    fi
-fi
-if $VERBOSE; then
-    info "SHOW_VERSION           = %s\n" "${SHOW_VERSION}"
-    info "PROJECT_NAME           = %s\n" "${PROJECT_NAME}"
-    info "PWD                    = %s\n" "${PWD}"
-    info "INTERACTIVE            = %s\n" "${INTERACTIVE}"
-    info "VERBOSE                = %s\n" "${VERBOSE}"
-    info "VVV                    = %s\n" "${VERBOSE}"
-    info "LOGGING                = %s\n" "${LOGGING}"
-    info "LOGGING_DIRECTORY      = %s\n" "${LOGGING_DIRECTORY}"
-    info "DOCKER_SOCKET          = %s\n" "${DOCKER_SOCKET}"
-    info "DOCKER_REGISTRY_URL    = %s\n" "${DOCKER_REGISTRY_URL}"
-    info "DOCKER_IMAGE_NAME      = %s\n" "${DOCKER_IMAGE_NAME}"
-    info "DOCKER_REBUILD         = %s\n" "${DOCKER_REBUILD}"
-    info "LIBRARY_PATH           = %s\n" "${LIBRARY_PATH}"
-    info "LIBRARY_URL            = %s\n" "${LIBRARY_URL}"
-    info "CREDENTIAL_SERVER_URL  = %s\n" "${CREDENTIAL_SERVER_URL}"
-    info "PIPELINE               = %s\n" "${PIPELINE}"
-fi
-
-#                                 FUNCTIONS
-################################################################################
-################################################################################
-################################################################################
-dockerGet() {
-    curl -s --unix-socket "$DOCKER_SOCKET" "http:$1" 2>&1
-}
-
-dockerPost() {
-    curl --post301 -s --unix-socket "$DOCKER_SOCKET" "http:$1" 2>&1
-}
-
-dockerHasImage() {
-    if ! [[ `docker images -q "$1" 2> /dev/null` == "" ]]; then
-        true
-    else
-        false
-    fi
-}
-
-dockerBuildFromMainProject() {
-    if $VERBOSE; then
-        info "%s\n" "Found cilo build script. Building:"
-    fi
-    if $VVV; then
-        $PWD/cilo-scripts/cilo-build-image.sh
-    else
-        $PWD/cilo-scripts/cilo-build-image.sh > /dev/null 2>&1
-    fi
-    if ! [ "$(($?))" -eq "0" ]; then
-        error "Something went wrong with the cilo image build script."
-    fi
-    if $VERBOSE; then
-        info "%s\n" "Built cilo image."
-    fi
-}
-
-dockerCreateImage() {
-    if $DOCKER_REBUILD; then
-        if [ -e "$PWD/cilo-scripts/cilo-build-image.sh" ]; then
-            dockerBuildFromMainProject
-        else
-            docker pull "$1" > /dev/null 2>&1
-            if [[ "$(($?))" -eq "0" ]]; then
-                info "%s\n" "Pulled cilo docker image."
-            else
-                error "%s\n" "Failed to pull cilo docker image."
-            fi
-        fi
-    else
-        docker pull "$1" > /dev/null 2>&1
-        if [[ "$(($?))" -eq "0" ]]; then
-            info "%s\n" "Pulled cilo docker image."
-        else
-            if [ -e "$PWD/cilo-scripts/cilo-build-image.sh" ]; then
-                dockerBuildFromMainProject
-            fi
-        fi
-    fi
-}
-
-dockerRunImage() {
-    if $VERBOSE; then
-        info "%s\n" "Starting docker image ($1)."
-        log '===================================RUNNING PIPELINE=================================\n' "" ""
-    fi
-    docker kill "$2" > /dev/null 2>&1
-    docker rm -f "$2"  > /dev/null 2>&1
-    if [ ! "$(docker ps -q -f name=$2)" ]; then
-        if [ "$(docker ps -aq -f status=exited -f name=$2)" ]; then
-            docker rm -f "$2"  > /dev/null 2>&1
-        fi
-        docker run -v "$PWD:/home/groovy/cilo/workspace" --name "$2" -it -e CILO_PIPELINE="$PIPELINE" "$1" 
-    fi
-}
-
-validateDocker() {
-    if [ -S $DOCKER_SOCKET ]; then
-        if $VERBOSE; then
-            info "%s\n" "Found docker ($DOCKER_SOCKET)"
-        fi
-        local CURL_RESULT=`dockerGet /ping`
-        local JQ_RESULT=`printf "%s" "$CURL_RESULT" | jq -r '.message' 2>&1`
-        if [ "$JQ_RESULT" = "page not found" ]; then
-            if $VERBOSE; then
-                info "%s\n" "Docker is running and accesible through unix socket."
-            fi
-        else
-            error "%s\n" "Docker is not running or socket not listening. Make sure docker is running and socket is open."
-            exit 1
-        fi
-    else
-        error "$s\n" "Docker could not be found. Either docker is not running or the socket could not be found in location ($DOCKER_SOCKET)"
-    fi
-}
-
 getDateTimeString() {
     date +"%m-%d-%Y-%H-%M-%S" | tr -d '\n\r' | tr -d '\r\n' | tr -d '\n' | tr -d ' '
 }
@@ -519,7 +571,7 @@ doesCommandExist() {
     which $1 1> /dev/null 2> /dev/null
 }
 
-doCommandsExist() {
+doBinariesExist() {
     if $VERBOSE; then
         info "%s\n" "Computing Dependencies"
     fi
@@ -544,7 +596,124 @@ doCommandsExist() {
     done
 }
 
-runProject() {
+dockerGet() {
+    curl -s --unix-socket "$DOCKER_SOCKET" "http:$1" 2>&1
+}
+
+dockerPost() {
+    curl --post301 -s --unix-socket "$DOCKER_SOCKET" "http:$1" 2>&1
+}
+
+dockerHasImage() {
+    if ! [[ `docker images -q "$1" 2> /dev/null` == "" ]]; then
+        true
+    else
+        false
+    fi
+}
+
+dockerBuildFromMainProject() {
+    if $VERBOSE; then
+        info "%s\n" "Found cilo build script. Building:"
+    fi
+    if $VVV; then
+        $PWD/cilo-scripts/cilo-build-image
+    else
+        $PWD/cilo-scripts/cilo-build-image > /dev/null 2>&1
+    fi
+    if ! [ "$(($?))" -eq "0" ]; then
+        error "Something went wrong with the cilo image build script."
+    fi
+    if $VERBOSE; then
+        info "%s\n" "Built cilo image."
+    fi
+}
+
+dockerCreateImage() {
+    if $DOCKER_REBUILD; then
+        if [ -e "$PWD/cilo-scripts/cilo-build-image" ]; then
+            dockerBuildFromMainProject
+        else
+            docker pull "$1" > /dev/null 2>&1
+            if [[ "$(($?))" -eq "0" ]]; then
+                info "%s\n" "Pulled cilo docker image."
+            else
+                error "%s\n" "Failed to pull cilo docker image."
+            fi
+        fi
+    else
+        docker pull "$1" > /dev/null 2>&1
+        if [[ "$(($?))" -eq "0" ]]; then
+            info "%s\n" "Pulled cilo docker image."
+        else
+            if [ -e "$PWD/cilo-scripts/cilo-build-image" ]; then
+                dockerBuildFromMainProject
+            fi
+        fi
+    fi
+}
+
+dockerRunImage() {
+    if ! [ -z ${3+1} ]; then
+        ENTRYPOINT="--entrypoint $3"
+    else
+        error "%s\n" "Cilo script needs to specify an entrypoint for running an image."
+        exit 1
+    fi
+    if $VERBOSE; then
+        info "%s\n" "Starting docker image ($1)."
+        log '===================================RUNNING PIPELINE=================================\n' "" ""
+    fi
+    docker kill "$2" > /dev/null 2>&1
+    docker rm -f "$2"  > /dev/null 2>&1
+    if [ ! "$(docker ps -q -f name=$2)" ]; then
+        if [ "$(docker ps -aq -f status=exited -f name=$2)" ]; then
+            docker rm -f "$2"  > /dev/null 2>&1
+        fi
+        docker run -v "$PWD:/home/cilo/workspace" --name "$2" -it --rm $ENTRYPOINT -e CILO_PIPELINE="$PIPELINE" "$1" 
+    fi
+}
+
+dockerRunMountExec() {
+    local name="cilocommand"
+    local image="$1"
+    local command="$2"
+    if $VERBOSE; then
+        info "%s\n" "Starting docker image ($image)."
+        log '===================================RUNNING COMMAND==================================\n' "" ""
+    fi
+    docker kill "$name" > /dev/null 2>&1
+    docker rm -f "$name"  > /dev/null 2>&1
+    if [ ! "$(docker ps -q -f name=$name)" ]; then
+        if [ "$(docker ps -aq -f status=exited -f name=$name)" ]; then
+            docker rm -f "$name"  > /dev/null 2>&1
+        fi
+        docker run --rm -it -v "$CILO_TEMP_DIRECTORY/:/home/cilo/tmp" -v "$PWD:/home/cilo/workspace" --name "$name" --entrypoint "bash" "$image" -c "$command"
+    fi
+}
+
+validateDocker() {
+    if [ -S $DOCKER_SOCKET ]; then
+        if $VERBOSE; then
+            info "%s\n" "Found docker ($DOCKER_SOCKET)"
+        fi
+        local CURL_RESULT=`dockerGet /ping`
+        local JQ_RESULT=`printf "%s" "$CURL_RESULT" | jq -r '.message' 2>&1`
+        if [ "$JQ_RESULT" = "page not found" ]; then
+            if $VERBOSE; then
+                info "%s\n" "Docker is running and accesible through unix socket."
+            fi
+        else
+            error "%s\n" "Docker is not running or socket not listening. Make sure docker is running and socket is open."
+            exit 1
+        fi
+    else
+        error "$s\n" "Docker could not be found. Either docker is not running or the socket could not be found in location ($DOCKER_SOCKET)"
+    fi
+}
+
+runCiloBash() {
+    local bash="$1"
     local imageName="$DOCKER_IMAGE_NAME"
     if $DOCKER_REBUILD; then
         dockerCreateImage "$imageName"
@@ -556,32 +725,28 @@ runProject() {
             exit 1
         fi
     fi
-    dockerRunImage "$imageName" "$PROJECT_NAME"
+    dockerRunMountExec "$imageName" "$bash"
 }
 
-#                               DEPENDENCIES
-################################################################################
-################################################################################
-################################################################################
-dependencies=`cat << EOF
-pwd
-printf
-cat
-tee
-grep
-sed
-awk
-tr
-docker
-curl
-jq
-EOF`
+runCiloScript() {
+    local script="$1"
+    local imageName="$DOCKER_IMAGE_NAME"
+    if $DOCKER_REBUILD; then
+        dockerCreateImage "$imageName"
+    fi
+    if ! dockerHasImage "$imageName"; then
+        dockerCreateImage "$imageName"
+        if ! dockerHasImage "$imageName"; then
+            error "%s\n" "Cannot find cilo docker image. Make sure you are able to connect to docker hub or use --registry option."
+            exit 1
+        fi
+    fi
+    dockerRunImage "$imageName" "$PROJECT_NAME" "$script"
+}
 
-#                                    MAIN
-################################################################################
-################################################################################
-################################################################################
-doCommandsExist "$dependencies"
-validateDocker
-runProject
+cleanup() {
+  rm ~/.cilo/tmp/* > /dev/null 2> /dev/null
+}
+trap cleanup EXIT
 
+main $@

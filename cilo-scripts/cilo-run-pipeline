@@ -1,0 +1,21 @@
+#!/usr/bin/env sh
+if [ -e "${CILO_PIPELINE}" ]; then
+    # BASE IMPORT
+    PIPELINE_FILE="/home/cilo/tmp/${CILO_PIPELINE}"
+    touch "$PIPELINE_FILE"
+    BASE_IMPORT=`cat <<EOF
+import groovy.transform.BaseScript
+@BaseScript CiloBaseScript base
+
+EOF`
+    echo "$BASE_IMPORT" >> "$PIPELINE_FILE"    
+    cat "${CILO_PIPELINE}" >> "$PIPELINE_FILE"
+    # PREPROCESSOR
+    cat "${PIPELINE_FILE}" | awk -f /home/cilo/bin/shell-substitution.awk > "${PIPELINE_FILE}.sub"
+    rm "${PIPELINE_FILE}"
+    mv "${PIPELINE_FILE}.sub" "${PIPELINE_FILE}"
+    # RUN
+    groovy -cp /home/cilo/bin/ "${PIPELINE_FILE}"
+else
+    echo "COULD NOT FIND PIPELINE FILE (${CILO_PIPELINE})."
+fi
