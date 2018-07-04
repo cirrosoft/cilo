@@ -91,7 +91,7 @@ main() {
 
     logInit
     computeDependencies
-    
+    ensure
     executeCommand $COMMAND
 }
 
@@ -259,23 +259,47 @@ showSecretUsage() {
 }
 
 secretGetString() {
-    touch "$CILO_TEMP_DIRECTORY/$1" > /dev/null 2> /dev/null
-    echo "$2" > "$CILO_TEMP_DIRECTORY/$1" 2> /dev/null
+    printf "$1"
 }
 
 secretGetFile() {
-    if ! [ -e "$2" ]; then
-        error "File ($2) for secret ($1) does not exist."
+    if ! [ -e "$1" ]; then
+        error "File ($1) for secret does not exist."
         exit 1;
     fi
-    touch "$CILO_TEMP_DIRECTORY/$1" > /dev/null 2> /dev/null
-    cp "$2" "$CILO_TEMP_DIRECTORY/$1" > /dev/null 2> /dev/null
+    cat "$1"
 }
 
 secretGetInput() {
-    touch "$CILO_TEMP_DIRECTORY/$1" > /dev/null 2> /dev/null
     IFS= read -t 0.01 -r -d '' indata
-    [[ -n $indata ]] && printf "%s" "$indata" > "$CILO_TEMP_DIRECTORY/$1"
+    [[ -n $indata ]] && printf "%s" "$indata"
+}
+
+ensure() {
+    ensureCiloDirectories
+    ensurePassword
+}
+
+ensureCiloDirectories() {
+    if ! [ -d "$CILO_TEMP_DIRECTORY" ]; then
+        mkdir -p "$CILO_TEMP_DIRECTORY"
+    fi
+    if ! [ -d "$CILO_SECRET_DIRECTORY" ]; then
+        mkdir -p "$CILO_SECRET_DIRECTORY"
+    fi
+}
+
+ensurePassword() {
+    if ! [ -e "$HOME/.cilo/password.hash" ]; then
+        local password="password"
+        read -s -p "Cilo Secrets Password: " password
+        hashString "$password" > "$HOME/.cilo/password.hash"
+        echo
+    fi
+}
+
+getCiloPasswordHash() {
+    cat "$HOME/.cilo/password.hash"
 }
 
 secretCommand() {
@@ -287,6 +311,7 @@ secretCommand() {
             name=$2
             type=$3
             value=$4
+            tempfile="$CILO_TEMP_DIRECTORY/$name"
             if [ -z "${name+1}" ]; then
                 showSecretUsage
             fi
@@ -296,33 +321,32 @@ secretCommand() {
                     if [ -z "${string+1}" ]; then
                         showSecretUsage
                     fi
-                    secretGetString "$name" "$value"
+                    secretGetString "$value" > "$tempfile"
                     ;;
                 file)
                     file="$value"
                     if [ -z "${file+1}" ]; then
                         showSecretUsage
                     fi
-                    secretGetFile "$name" "$value"
+                    secretGetFile "$value" > "$tempfile"
                     ;;
                 input)
-                    secretGetInput "$name" "$value"
+                    secretGetInput > "$tempfile"
                     ;;
                 *)
                     showSecretUsage
             esac
-            prepareSecretDirectory
-            secretCommandCreate "$name"
+            secretCommandCreate "$name" "$tempfile"
             ;;
         read)
             name=$2
-            prepareSecretDirectory
             secretCommandRead "$name"
             ;;
         update)
             name=$2
             type=$3
             value=$4
+            tempfile="$CILO_TEMP_DIRECTORY/$name"
             if [ -z "${name+1}" ]; then
                 showSecretUsage
             fi
@@ -332,76 +356,105 @@ secretCommand() {
                     if [ -z "${string+1}" ]; then
                         showSecretUsage
                     fi
-                    secretGetString "$name" "$value"
+                    secretGetString "$value" > "$tempfile"
                     ;;
                 file)
                     file="$value"
                     if [ -z "${file+1}" ]; then
                         showSecretUsage
                     fi
-                    secretGetFile "$name" "$value"
+                    secretGetFile "$value" > "$tempfile"
                     ;;
                 input)
-                    secretGetInput "$name" "$value"
+                    secretGetInput  > "$tempfile"
                     ;;
                 *)
                     showSecretUsage
             esac
-            prepareSecretDirectory
-            secretCommandUpdate "$name"
+            secretCommandUpdate "$name" "$tempfile"
             ;;
         delete)
             name=$2
-            prepareSecretDirectory
             secretCommandDelete "$name"
             ;;
     esac
     exit 0
 }
 
+encryptFile() {
+    filename=encryptFile
+    cp $1 $CILO_TEMP_DIRECTORY/$filename > /dev/null 2> /dev/null
+    local password=`getCiloPasswordHash`
+    runCiloBash "cat /home/cilo/tmp/$filename | openssl enc -k \"$password\" -a -aes-256-cbc"
+    if ! [ "$?" = "0" ]; then
+        echo "Cilo password is not valid for secret ($name)."
+        exit 1
+    fi
+    rm $CILO_TEMP_DIRECTORY/$filename > /dev/null 2> /dev/null
+}
+
+decryptFile() {
+    filename=encryptFile
+    cp $1 $CILO_TEMP_DIRECTORY/$filename > /dev/null 2> /dev/null
+    local password=`getCiloPasswordHash`
+    runCiloBash "cat /home/cilo/tmp/$filename | openssl enc -k \"$password\" -a -d -aes-256-cbc"
+    if ! [ "$?" = "0" ]; then
+        echo "Cilo password is not valid for secret ($name)."
+        exit 1
+    fi
+    rm $CILO_TEMP_DIRECTORY/$filename > /dev/null 2> /dev/null
+}
+
+hashFile() {
+    filename=encryptFile
+    cp $1 $CILO_TEMP_DIRECTORY/$filename > /dev/null 2> /dev/null
+    runCiloBash "cat /home/cilo/tmp/$filename | openssl dgst -sha512 | cut -d ' ' -f2-"
+    rm $CILO_TEMP_DIRECTORY/$filename > /dev/null 2> /dev/null
+}
+
+hashString() {
+    runCiloBash "printf '%s' \"$1\" | openssl dgst -sha512 | cut -d ' ' -f2-"
+}
+
 secretCommandCreate() {
     name="$1"
-    localfilename="$CILO_TEMP_DIRECTORY/$name"
+    filename="$2"
     mountTemp="/home/cilo/tmp"
     if [ -e "$CILO_SECRET_DIRECTORY/$name" ]; then
         error "%s\n" "Secret by the name of ($name) already exists."
         exit 1;
     fi
-    if ! [ -e "$localfilename" ]; then
-        error "%s\n" "Secret by the name of ($name) does not have a binary file ($localfilename) to load."
+    if ! [ -e "$filename" ]; then
+        error "%s\n" "Secret by the name of ($name) does not have a binary file ($filename) to load."
         exit 1;
     fi
-    runCiloBash "cat $mountTemp/$name | openssl enc -a -aes-256-cbc > $mountTemp/$name.enc"
-    cat "$localfilename.enc" > "$CILO_SECRET_DIRECTORY/$name"
+    encryptFile "$filename" > "$CILO_SECRET_DIRECTORY/$name"
     log "%s\n" "Secret Added ($name)."
 }
 
 secretCommandRead() {
     name="$1"
     filename="$CILO_SECRET_DIRECTORY/$name"
-    mountTemp="/home/cilo/tmp"
     if ! [ -e "$filename" ]; then
         error "%s\n" "Secret by the name of ($name) does not exist."
         exit 1;
     fi
-    cp "$filename" "$CILO_TEMP_DIRECTORY/$name"
-    runCiloBash "cat $mountTemp/$name | openssl enc -a -d -aes-256-cbc"
+    decryptFile "$filename"
 }
 
 secretCommandUpdate() {
     name="$1"
-    localfilename="$CILO_TEMP_DIRECTORY/$name"
+    filename="$2"
     mountTemp="/home/cilo/tmp"
     if ! [ -e "$CILO_SECRET_DIRECTORY/$name" ]; then
         error "%s\n" "Secret by the name of ($name) does not exists."
         exit 1;
     fi
-    if ! [ -e "$localfilename" ]; then
-        error "%s\n" "Secret by the name of ($name) does not have a binary file ($localfilename) to load."
+    if ! [ -e "$filename" ]; then
+        error "%s\n" "Secret by the name of ($name) does not have a binary file ($filename) to load."
         exit 1;
     fi
-    runCiloBash "cat $mountTemp/$name | openssl enc -a -aes-256-cbc > $mountTemp/$name.enc"
-    cat "$localfilename.enc" > "$CILO_SECRET_DIRECTORY/$name"
+    encryptFile "$filename" > "$CILO_SECRET_DIRECTORY/$name"
     log "%s\n" "Secret updated ($name)."
 }
 
@@ -444,23 +497,11 @@ getPropertiesFromFile() {
     fi
 }
 
-
-
-prepareSecretDirectory() {
-    if ! [ -d "$CILO_TEMP_DIRECTORY" ]; then
-        mkdir -p "$CILO_TEMP_DIRECTORY"
-    fi
-    if ! [ -d "$CILO_SECRET_DIRECTORY" ]; then
-        mkdir -p "$CILO_SECRET_DIRECTORY"
-    fi
-}
-
 listSecretDirectory() {
     for filename in $CILO_SECRET_DIRECTORY/*; do
         basename $filename
     done
 }
-
 
 logInit() {
     INITIAL_TIME=`getDateTimeString`
