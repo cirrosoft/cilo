@@ -3,6 +3,11 @@ def checkout() {
 }
 
 step "checkout", {
+     println "SECRET START"
+     secret "username", {
+            println username
+     }
+     println "SECRET END"
      $ echo "HELLO SHELL"
      $ if true; then
      $   echo "IF CONDITION WORKS!"
@@ -24,6 +29,12 @@ step "build", {
 }
 
 step "test", {
+     println "SECRET2 START"
+     secret "username", {
+            println username
+            $ echo $secret
+     }
+     println "SECRET2 END"
      println "TESTING"
 }
 

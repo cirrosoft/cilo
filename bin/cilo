@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+CR=$(printf '\r')
+
 main() {
     VERSION_NUMBER="1.0"
     VERSION_STRING=$'Cilo\t(Unix)\t'"$VERSION_NUMBER"
@@ -219,6 +221,10 @@ executeCommand() {
         shift;
         runCommand $@
     fi
+    if [ "$1" = "hash" ]; then
+        shift;
+        hashRandom
+    fi
     showUsage
     exit 1
 }
@@ -259,7 +265,7 @@ showSecretUsage() {
 }
 
 secretGetString() {
-    printf "$1"
+    printf "%s" "$1"
 }
 
 secretGetFile() {
@@ -299,7 +305,7 @@ ensurePassword() {
 }
 
 getCiloPasswordHash() {
-    cat "$HOME/.cilo/password.hash"
+    cat "$HOME/.cilo/password.hash" | tr -d '\n' | tr -d '\r'
 }
 
 secretCommand() {
@@ -383,9 +389,12 @@ secretCommand() {
 
 encryptFile() {
     filename=encryptFile
-    cp $1 $CILO_TEMP_DIRECTORY/$filename > /dev/null 2> /dev/null
     local password=`getCiloPasswordHash`
-    runCiloBash "cat /home/cilo/tmp/$filename | openssl enc -k \"$password\" -a -aes-256-cbc"
+    if ! [ -z "${2+1}" ]; then
+        password="$2"
+    fi
+    cp $1 $CILO_TEMP_DIRECTORY/$filename > /dev/null 2> /dev/null
+    runCiloBash "cat /home/cilo/tmp/$filename | openssl enc -pass pass:\"$password\" -a -aes-256-cbc"
     if ! [ "$?" = "0" ]; then
         echo "Cilo password is not valid for secret ($name)."
         exit 1
@@ -395,9 +404,12 @@ encryptFile() {
 
 decryptFile() {
     filename=encryptFile
-    cp $1 $CILO_TEMP_DIRECTORY/$filename > /dev/null 2> /dev/null
     local password=`getCiloPasswordHash`
-    runCiloBash "cat /home/cilo/tmp/$filename | openssl enc -k \"$password\" -a -d -aes-256-cbc"
+    if ! [ -z ${2+1} ]; then
+        password="$2"
+    fi
+    cp $1 $CILO_TEMP_DIRECTORY/$filename > /dev/null 2> /dev/null
+    runCiloBash "cat /home/cilo/tmp/$filename | openssl enc -pass pass:\"$password\" -a -d -aes-256-cbc"
     if ! [ "$?" = "0" ]; then
         echo "Cilo password is not valid for secret ($name)."
         exit 1
@@ -405,15 +417,19 @@ decryptFile() {
     rm $CILO_TEMP_DIRECTORY/$filename > /dev/null 2> /dev/null
 }
 
+hashRandom() {
+    runCiloBash "dd if=/dev/urandom bs=1028 count=1 2> /dev/null | openssl dgst -sha512 | cut -d ' ' -f2- | tr -d '\n' | tr -d '\r'"
+}
+
 hashFile() {
     filename=encryptFile
     cp $1 $CILO_TEMP_DIRECTORY/$filename > /dev/null 2> /dev/null
-    runCiloBash "cat /home/cilo/tmp/$filename | openssl dgst -sha512 | cut -d ' ' -f2-"
+    runCiloBash "cat /home/cilo/tmp/$filename | openssl dgst -sha512 | cut -d ' ' -f2- | tr -d '\n' | tr -d '\r'"
     rm $CILO_TEMP_DIRECTORY/$filename > /dev/null 2> /dev/null
 }
 
 hashString() {
-    runCiloBash "printf '%s' \"$1\" | openssl dgst -sha512 | cut -d ' ' -f2-"
+    runCiloBash "printf '%s' \"$1\" | openssl dgst -sha512 | cut -d ' ' -f2- | tr -d '\n' | tr -d '\r'"
 }
 
 secretCommandCreate() {
@@ -472,7 +488,7 @@ secretCommandDelete() {
 
 
 getDateTimeString() {
-    date +"%m-%d-%Y-%H-%M-%S" | tr -d '\n\r' | tr -d '\r\n' | tr -d '\n' | tr -d ' '
+    date +"%m-%d-%Y-%H-%M-%S" | tr -d '\r' | tr -d '\n' | tr -d ' '
 }
 
 getProperty() {
@@ -601,7 +617,7 @@ error() {
 }
 
 getDateTimeString() {
-    date +"%m-%d-%Y-%H-%M-%S" | tr -d '\n\r' | tr -d '\r\n' | tr -d '\n' | tr -d ' '
+    date +"%m-%d-%Y-%H-%M-%S" | tr -d '\r' | tr -d '\n' | tr -d ' '
 }
 
 doesCommandExist() {
@@ -711,7 +727,19 @@ dockerRunImage() {
         if [ "$(docker ps -aq -f status=exited -f name=$2)" ]; then
             docker rm -f "$2"  > /dev/null 2>&1
         fi
-        docker run -v "$PWD:/home/cilo/workspace" --name "$2" -it --rm $ENTRYPOINT -e CILO_PIPELINE="$PIPELINE" "$1" 
+        # prepareSecrets for pipeline
+        local SECRET_KEY=`hashRandom`
+        for file in $CILO_SECRET_DIRECTORY/*; do
+            filename=`basename $file`
+            decryptFile "$file" > "$CILO_TEMP_DIRECTORY/$filename".dec
+        done
+        for file in $CILO_SECRET_DIRECTORY/*; do
+            filename=`basename $file`
+            echo "PASSWORD: $SECRET_KEY"
+            encryptFile "$CILO_TEMP_DIRECTORY/$filename".dec "$SECRET_KEY" > "$CILO_TEMP_DIRECTORY/$filename"
+        done
+        rm $CILO_TEMP_DIRECTORY/*.dec
+        docker run -v "$CILO_TEMP_DIRECTORY/:/home/cilo/tmp" -v "$PWD:/home/cilo/workspace" --name "$2" -it --rm $ENTRYPOINT -e SECRET_KEY="$SECRET_KEY" -e CILO_PIPELINE="$PIPELINE" "$1" 
     fi
 }
 
@@ -719,10 +747,6 @@ dockerRunMountExec() {
     local name="cilocommand"
     local image="$1"
     local command="$2"
-    if $VERBOSE; then
-        info "%s\n" "Starting docker image ($image)."
-        log '===================================RUNNING COMMAND==================================\n' "" ""
-    fi
     docker kill "$name" > /dev/null 2>&1
     docker rm -f "$name"  > /dev/null 2>&1
     if [ ! "$(docker ps -q -f name=$name)" ]; then
