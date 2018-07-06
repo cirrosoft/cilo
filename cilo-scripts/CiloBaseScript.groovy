@@ -3,6 +3,7 @@ abstract class CiloBaseScript extends Script {
 
     def steps = [:]
     def secretsMap = [:]
+    def envMap = [:]
     
     def run() {
         beforePipeline()
@@ -52,11 +53,26 @@ abstract class CiloBaseScript extends Script {
         env=[]
         System.getenv().each{ k, v -> env<<"$k=$v" }
         secretsMap.each{ k, v -> env<<"$k=$v" }
+        envMap.each{ k, v -> env<<"$k=$v" }
         def proc = command.execute(env, new File("/home/cilo/workspace/"))
         proc.consumeProcessOutput(sout, serr)
         def minutes = 3
         proc.waitForOrKill(minutes*60*1000)
         print "$sout"
+    }
+
+    def env(map, closure) {
+        for (pair in map) {
+            def key=pair.key
+            def value=pair.value
+            envMap << ["${key}":"${value}"]
+        }
+        closure.call()
+        for (pair in map) {
+            def key=pair.key
+            def value=pair.value
+            envMap -= ["${key}":"${value}"]
+        }
     }
     
     def secret(name, closure) {

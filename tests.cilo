@@ -1,18 +1,70 @@
+
+step "Simple Shell", {
+     $ echo "From shell works"
+}
+
+step "Mixed Shell", {
+    println "From groovy works"
+    $ echo "From shell works"
+}
+
+step "Multiline Shell", {
+    $ echo "Multiline:"
+    $ echo "from-line1" \
+    $      "from-line2" \
+    $      "from-line3" \
+}
+
+step "Control Flow Shell", {
+    $ ifStatement() {
+    $   if $1; then
+    $     echo "true"
+    $   else
+    $     echo "false"
+    $   fi
+    $ }
+    $ ifStatement "true"
+    $ ifStatement "false"
+}
+
+step "Shell Variable Access", {
+    def variables = [
+        "VAR_1":"groovy variable 1",
+        "VAR_2":"groovy variable 2"
+    ]
+    env variables, {
+        $ echo "Bash Var 1: $VAR_1"
+        $ echo "Bash Var 2: $VAR_2"
+    }
+}
+
+step "Shell Variable Scope", {
+    def outer = "Outer scope"
+    def variables = [
+        "VAR_1":"Groovy to shell variable",
+    ]
+    env variables, {
+        def inner = "Inner scope"        
+        println "Inner: ${outer}"
+        println "Outer: ${inner}"
+    }
+}
+
 step "Groovy Secret", {
      secret "username", {
-            println "SECRET: ${username}"
-            println "SECRET_TEXT: ${usernameText}"
-            println "SECRET_BYTES: ${usernameBytes}"
-            println "SECRET_FILE: ${usernameFile}"
+            println "Secret------: ${username}"
+            println "Secret Text-: ${usernameText}"
+            println "Secret Bytes: ${usernameBytes}"
+            println "Secret File-: ${usernameFile}"
      }
 }
 
 step "Bash Secret", {
      secret "password", {
-            $ echo "FROM_SHELL-------SECRET: $password"
-            $ echo "FROM_SHELL--SECRET TEXT: $passwordText"
-            $ echo "FROM_SHELL-SECRET BYTES: $passwordBytes"
-            $ echo "FROM_SHELL--SECRET FILE: $passwordFile"
+            $ echo "From shell-------Secret: $password"
+            $ echo "From shell--Secret Text: $passwordText"
+            $ echo "From shell-Secret Bytes: $passwordBytes"
+            $ echo "From shell--Secret File: $passwordFile"
      }
 }
 
@@ -20,7 +72,7 @@ step "Nested Secrets", {
      secret "username", {
             secret "password", {
                    println "USERNAME: ${username}"
-                   $ echo "PASSWORD: ${password}"
+            $ echo "Password: ${password}"
             }
      }    
 }
@@ -28,7 +80,46 @@ step "Nested Secrets", {
 step "Secret Combined Variables", {
      def password = "itdoeswork86"
      secret "username", {
-            println "USERNAME FROM SECRET--: $username"
-            println "PASSWORD FROM VARIABLE: $password"
+            println "Username from Secret--: $username"
+            println "Password from Variable: $password"
      }    
 }
+
+step "Secret Scope", {
+    def outer = "Outer scope"
+    secret "username", {
+        def inner = "Inner scope"
+        println "Groovy Variable Outer: ${outer}"
+        println "Groovy Variable Inner: ${inner}"
+    }
+}
+
+step "Variable Scope Combos", {
+    def innerVariables = [
+        "VAR_INNER":"Groovy to shell inner variable",
+    ]
+    def outerVariables = [
+        "VAR_OUTER":"Groovy to shell outer variable",
+    ]
+    def outer = "Outer scope"
+    env outerVariables, {
+        def middle1 = "Middle1 scope"
+        secret "username", {
+            def middle2 = "Middle2 scope"
+            env innerVariables, {
+                def middle3 = "Middle3 scope"
+                secret "password", {
+                    def inner = "Inner scope"
+                    println "Groovy Variable Outer--: ${outer}"
+                    println "Groovy Variable Middle1: ${middle1}"
+                    println "Groovy Variable Middle2: ${middle2}"
+                    println "Groovy Variable Middle3: ${middle3}"
+                    println "Groovy Variable Inner--: ${inner}"
+                    $ echo "Bash Var Inner-------: $VAR_INNER"
+                    $ echo "Bash Var Outer-------: $VAR_OUTER"
+                }
+            }
+        }
+    }
+}
+
