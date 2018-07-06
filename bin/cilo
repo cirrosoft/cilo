@@ -102,8 +102,8 @@ showUsage() {
 }
 
 parseConfig() {
+    getPropertiesFromFile "$HOME/.cilo/config"
     getPropertiesFromFile "$PWD/.cilo/config"
-    getPropertiesFromFile "~/.cilo/config"
 }
 
 parseArgs() {
@@ -492,7 +492,7 @@ getDateTimeString() {
 }
 
 getProperty() {
-    cat $1 | grep -i "^\s*$2\s*=" | tail -n 1 | cut -d'=' -f2- | tr -d '"' | tr -d ' ' | tr -d '\r' | tr -d '\n'
+    cat $1 | grep -i "^\s*$2\s*=" | tail -n 1 | tr -d '"' | tr -d ' ' | cut -d'=' -f2- | tr -d '\r' | tr -d '\n' 
 }
 
 getPropertiesFromFile() {
@@ -688,6 +688,7 @@ dockerBuildFromMainProject() {
 
 dockerCreateImage() {
     if $DOCKER_REBUILD; then
+        DOCKER_REBUILD="false"
         if [ -e "$PWD/cilo-scripts/cilo-build-image" ]; then
             dockerBuildFromMainProject
         else
@@ -717,29 +718,42 @@ dockerRunImage() {
         error "%s\n" "Cilo script needs to specify an entrypoint for running an image."
         exit 1
     fi
-    if $VERBOSE; then
-        info "%s\n" "Starting docker image ($1)."
-        log '===================================RUNNING PIPELINE=================================\n' "" ""
-    fi
+    if $VERBOSE; then info "%s\n" "Killing previous docker image ($2)."; fi
     docker kill "$2" > /dev/null 2>&1
+    if $VERBOSE; then info "%s\n" "Removing previous docker image ($2)."; fi
     docker rm -f "$2"  > /dev/null 2>&1
     if [ ! "$(docker ps -q -f name=$2)" ]; then
         if [ "$(docker ps -aq -f status=exited -f name=$2)" ]; then
-            docker rm -f "$2"  > /dev/null 2>&1
+            if $VERBOSE; then info "%s\n" "Removing previous docker image ($2) after exit."; fi
+            # TODO: make sure this line works since it could try to remove a list.
+            docker rm -f "$(docker ps -aq -f status=exited -f name=$2)" > /dev/null 2>&1
         fi
         # prepareSecrets for pipeline
+        local USER_KEY=`getCiloPasswordHash`
+        if $VERBOSE; then info "%s\n" "Generating secret token for container ($1)."; fi
         local SECRET_KEY=`hashRandom`
+        if $VERBOSE; then info "%s\n" "Preparing secrets:"; fi
+        rm $CILO_TEMP_DIRECTORY/* 2> /dev/null
         for file in $CILO_SECRET_DIRECTORY/*; do
             filename=`basename $file`
-            decryptFile "$file" > "$CILO_TEMP_DIRECTORY/$filename".dec
+            if $VERBOSE; then info "\t%s\n" "$filename"; fi
+            cp "$file" "$CILO_TEMP_DIRECTORY/$filename" > /dev/null 2> /dev/null
         done
-        for file in $CILO_SECRET_DIRECTORY/*; do
-            filename=`basename $file`
-            echo "PASSWORD: $SECRET_KEY"
-            encryptFile "$CILO_TEMP_DIRECTORY/$filename".dec "$SECRET_KEY" > "$CILO_TEMP_DIRECTORY/$filename"
-        done
-        rm $CILO_TEMP_DIRECTORY/*.dec
-        docker run -v "$CILO_TEMP_DIRECTORY/:/home/cilo/tmp" -v "$PWD:/home/cilo/workspace" --name "$2" -it --rm $ENTRYPOINT -e SECRET_KEY="$SECRET_KEY" -e CILO_PIPELINE="$PIPELINE" "$1" 
+        # encrypt secrets using generated token
+        if $VERBOSE; then info "%s\n" "Encrypting secrets using generated token."; fi
+        docker run -it --rm -v "$CILO_TEMP_DIRECTORY:/home/cilo/tmp" --name "cilo-encrypt-temporary" -e SECRET_KEY="$SECRET_KEY" -e USER_KEY="$USER_KEY" "$1" "cilo-encrypt-temporary"
+        # run actual cilo docker
+        if $VERBOSE; then info "%s\n" "Starting docker image ($1)."; fi
+        if [ "$3" = "cilo-run-pipeline" ]; then
+            log '===================================RUNNING PIPELINE=================================\n' "" ""
+        else
+            if [ "$3" = "bash" ]; then
+                log '===================================RUNNING SHELL====================================\n' "" ""
+            else
+                log '===================================RUNNING SCRIPT===================================\n' "" ""
+            fi
+        fi
+        docker run -it --rm -v "$CILO_TEMP_DIRECTORY:/home/cilo/tmp" -v "$PWD:/home/cilo/workspace" --name "$2" $ENTRYPOINT -e SECRET_KEY="$SECRET_KEY" -e CILO_PIPELINE="$PIPELINE" "$1"
     fi
 }
 
@@ -751,9 +765,9 @@ dockerRunMountExec() {
     docker rm -f "$name"  > /dev/null 2>&1
     if [ ! "$(docker ps -q -f name=$name)" ]; then
         if [ "$(docker ps -aq -f status=exited -f name=$name)" ]; then
-            docker rm -f "$name"  > /dev/null 2>&1
+            docker rm -f "$(docker ps -aq -f status=exited -f name=$2)" > /dev/null 2>&1
         fi
-        docker run --rm -it -v "$CILO_TEMP_DIRECTORY/:/home/cilo/tmp" -v "$PWD:/home/cilo/workspace" --name "$name" --entrypoint "bash" "$image" -c "$command"
+        docker run --rm -it -v "$CILO_TEMP_DIRECTORY:/home/cilo/tmp" -v "$PWD:/home/cilo/workspace" --name "$name" --entrypoint "bash" "$image" -c "$command"
     fi
 }
 

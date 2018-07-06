@@ -40,7 +40,7 @@ abstract class CiloBaseScript extends Script {
     def step(name, closure) {
         steps[name] = closure
     }
-
+    
     def ciloShellScript(filename) {
         println "CILOSHELLSCRIPT SECRETS DELEGATE: "
         println secretsMap
@@ -53,22 +53,47 @@ abstract class CiloBaseScript extends Script {
     }
     
     def shell(command) {
-        def sout = new StringBuilder(), serr = new StringBuilder()
+        def sout = new StringBuilder()
+        def serr = new StringBuilder()
+        // env=[]
+        // System.getenv().each{ k, v -> env<<"$k=$v" }
+        // secretsMap.each{ k, v -> env<<"$k=$v" }
+        // def proc = command.execute(env, new File("/home/cilo/workspace/"))
         def proc = command.execute()
         proc.consumeProcessOutput(sout, serr)
         def minutes = 3
         proc.waitForOrKill(minutes*60*1000)
-        print "$sout"
+        // println env
+        // println "COMMAND: \n${command}"
+        // println "SHELLOUT: \n$sout"
+        // println "SHELLERR: \n$serr"
+        println "$sout"
     }
     
     def secret(name, closure) {
-        def secret = "xnandor"
+        shell("cilo-decrypt-secret ${name}")
+        def nameText = "${name}Text"
+        def nameBytes = "${name}Bytes"
+        def nameFile = "${name}File"
+        def secretFile = new File("/home/cilo/secret/${name}")
+        def secretBytes = secretFile.getBytes()
+        def secretText = secretFile.getText()
         def binding = new Binding()
-        secretsMap << [name:secret]
-        binding.setVariable(name, secret)
+        secretsMap << [name:secretText]
+        secretsMap << [nameText:secretText]
+        secretsMap << [nameBytes:secretBytes]
+        secretsMap << [nameFile:"/home/cilo/secret/${name}"]
+        binding.setVariable(name, secretText)
+        binding.setVariable(nameText, secretText)
+        binding.setVariable(nameBytes, secretBytes)
+        binding.setVariable(nameFile, "/home/cilo/secret/${name}")
         closure.setBinding(binding)
         closure.call()
-        secretsMap -= [name:secret]
+        secretsMap -= [name:secretText]
+        secretsMap -= [nameText:secretText]
+        secretsMap -= [nameBytes:secretBytes]
+        secretsMap -= [nameFile:"/home/cilo/secret/${name}"]
+        shell("rm /home/cilo/secret/${name}")
     }
         
 }
