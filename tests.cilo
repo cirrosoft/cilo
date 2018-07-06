@@ -27,6 +27,13 @@ step "Control Flow Shell", {
     $ ifStatement "false"
 }
 
+step "Shell Timing", {
+    $ for i in `seq 1 10`; do
+    $   sleep 0.2
+    $   echo "Slept for $i second total."
+    $ done
+}
+
 step "Shell Variable Access", {
     def variables = [
         "VAR_1":"groovy variable 1",
@@ -38,7 +45,22 @@ step "Shell Variable Access", {
     }
 }
 
-step "Shell Variable Scope", {
+step "Shell Return Values", {
+    $ echo "Some value from stdout."
+    $ echo "Some value from stderr." 1>&2
+    $ false
+    println "STDOUT--: $stdOut"
+    print   "STDERR--: $stdErr"
+    println "EXITCODE: $exitCode (should be 1)"
+    $ echo "Some other value from stdout."
+    $ echo "Some other value from stderr." 1>&2
+    $ true
+    println "STDOUT--: $stdOut"
+    print   "STDERR--: $stdErr"
+    println "EXITCODE: $exitCode (should be 0)"
+}
+
+step "Variable Scope", {
     def outer = "Outer scope"
     def variables = [
         "VAR_1":"Groovy to shell variable",

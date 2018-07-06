@@ -16,7 +16,7 @@ BEGIN {
             i++
             filename="/home/cilo/tmp/script" i ".sh"
             print "#!/usr/bin/env sh" "\n" "# script from line number " linum " of original file. \n" script >> filename
-            print "ciloShellScript('''" filename "''');";
+            print "stdMap = ciloShellScript('''" filename "'''); stdOut=stdMap['stdOut']; stdErr=stdMap['stdErr']; exitCode=stdMap['exitCode'];";
         }
         print $0
         script="";
