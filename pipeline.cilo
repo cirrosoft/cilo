@@ -1,33 +1,36 @@
-def checkout() {
-    println "CHECKING OUT"
-}
 
-step "checkout", {
-     checkout()
-     println "SECRET START"
+step "Groovy Secret", {
      secret "username", {
             println "SECRET: ${username}"
             println "SECRET_TEXT: ${usernameText}"
             println "SECRET_BYTES: ${usernameBytes}"
             println "SECRET_FILE: ${usernameFile}"
      }
-     println "SECRET END"
-     // $ echo "checkout bash script"
 }
 
-step "build", {
-     println "BUILDING"
-     $ echo 'script with single quotes.'
-     $ echo 'line 2'
-}
-
-step "test", {
-     println "SECRET2 START"
+step "Bash Secret", {
      secret "password", {
-            println password
-            $ echo $passwordText
+            $ echo "FROM_SHELL-------SECRET: $password"
+            $ echo "FROM_SHELL--SECRET TEXT: $passwordText"
+            $ echo "FROM_SHELL-SECRET BYTES: $passwordBytes"
+            $ echo "FROM_SHELL--SECRET FILE: $passwordFile"
      }
-     println "SECRET2 END"
-     println "TESTING"
+}
+
+step "Nested Secrets", {
+     secret "username", {
+            secret "password", {
+                   println "USERNAME: ${username}"
+                   $ echo "PASSWORD: ${password}"
+            }
+     }    
+}
+
+step "Secret Combined Variables", {
+     def password = "itdoeswork86"
+     secret "username", {
+            println "USERNAME FROM SECRET--: $username"
+            println "PASSWORD FROM VARIABLE: $password"
+     }    
 }
 

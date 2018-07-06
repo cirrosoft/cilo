@@ -42,12 +42,6 @@ abstract class CiloBaseScript extends Script {
     }
     
     def ciloShellScript(filename) {
-        println "CILOSHELLSCRIPT SECRETS DELEGATE: "
-        println secretsMap
-        for (secret in secretsMap) {
-            println secret
-        }
-        println "CILOSHELLSCRIPT SECRETS DELEGATE END"
         shell("chmod 777 $filename")
         shell("$filename")
     }
@@ -55,19 +49,14 @@ abstract class CiloBaseScript extends Script {
     def shell(command) {
         def sout = new StringBuilder()
         def serr = new StringBuilder()
-        // env=[]
-        // System.getenv().each{ k, v -> env<<"$k=$v" }
-        // secretsMap.each{ k, v -> env<<"$k=$v" }
-        // def proc = command.execute(env, new File("/home/cilo/workspace/"))
-        def proc = command.execute()
+        env=[]
+        System.getenv().each{ k, v -> env<<"$k=$v" }
+        secretsMap.each{ k, v -> env<<"$k=$v" }
+        def proc = command.execute(env, new File("/home/cilo/workspace/"))
         proc.consumeProcessOutput(sout, serr)
         def minutes = 3
         proc.waitForOrKill(minutes*60*1000)
-        // println env
-        // println "COMMAND: \n${command}"
-        // println "SHELLOUT: \n$sout"
-        // println "SHELLERR: \n$serr"
-        println "$sout"
+        print "$sout"
     }
     
     def secret(name, closure) {
@@ -79,20 +68,19 @@ abstract class CiloBaseScript extends Script {
         def secretBytes = secretFile.getBytes()
         def secretText = secretFile.getText()
         def binding = new Binding()
-        secretsMap << [name:secretText]
-        secretsMap << [nameText:secretText]
-        secretsMap << [nameBytes:secretBytes]
-        secretsMap << [nameFile:"/home/cilo/secret/${name}"]
-        binding.setVariable(name, secretText)
-        binding.setVariable(nameText, secretText)
-        binding.setVariable(nameBytes, secretBytes)
-        binding.setVariable(nameFile, "/home/cilo/secret/${name}")
+        secretsMap << ["${name}":"${secretText}"]
+        secretsMap << ["${nameText}":"${secretText}"]
+        secretsMap << ["${nameBytes}":"${secretBytes}"]
+        secretsMap << ["${nameFile}":"/home/cilo/secret/${name}"]
+        for (secretPair in secretsMap) {
+            binding.setVariable(secretPair.key, secretPair.value)
+        }
         closure.setBinding(binding)
         closure.call()
-        secretsMap -= [name:secretText]
-        secretsMap -= [nameText:secretText]
-        secretsMap -= [nameBytes:secretBytes]
-        secretsMap -= [nameFile:"/home/cilo/secret/${name}"]
+        secretsMap -= ["${name}":"${secretText}"]
+        secretsMap -= ["${nameText}":"${secretText}"]
+        secretsMap -= ["${nameBytes}":"${secretBytes}"]
+        secretsMap -= ["${nameFile}":"/home/cilo/secret/${name}"]
         shell("rm /home/cilo/secret/${name}")
     }
         
