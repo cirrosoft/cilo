@@ -287,6 +287,9 @@ ensure() {
 }
 
 ensureCiloDirectories() {
+    if ! [ -d "$HOME/.cilo/" ]; then
+        mkdir -p "$HOME/.cilo/"
+    fi
     if ! [ -d "$CILO_TEMP_DIRECTORY" ]; then
         mkdir -p "$CILO_TEMP_DIRECTORY"
     fi
@@ -515,7 +518,9 @@ getPropertiesFromFile() {
 
 listSecretDirectory() {
     for filename in $CILO_SECRET_DIRECTORY/*; do
-        basename $filename
+        if ! [ "$filename" = '*' ]; then
+            basename $filename
+        fi
     done
 }
 
@@ -735,9 +740,11 @@ dockerRunImage() {
         if $VERBOSE; then info "%s\n" "Preparing secrets:"; fi
         rm $CILO_TEMP_DIRECTORY/* 2> /dev/null
         for file in $CILO_SECRET_DIRECTORY/*; do
-            filename=`basename $file`
-            if $VERBOSE; then info "\t%s\n" "$filename"; fi
-            cp "$file" "$CILO_TEMP_DIRECTORY/$filename" > /dev/null 2> /dev/null
+            if ! [ "$file" = '*' ]; then
+                filename=`basename $file`
+                if $VERBOSE; then info "\t%s\n" "$filename"; fi
+                cp "$file" "$CILO_TEMP_DIRECTORY/$filename" > /dev/null 2> /dev/null
+            fi
         done
         # encrypt secrets using generated token
         if $VERBOSE; then info "%s\n" "Encrypting secrets using generated token."; fi
