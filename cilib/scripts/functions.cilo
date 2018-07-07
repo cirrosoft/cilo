@@ -1,0 +1,20 @@
+
+def echoString(string) {
+    def variables = ["string": "${string}"]
+    env variables, {
+        $ echo "$string"
+    }
+}
+
+public class EchoClass {
+    public def echo() {
+        println "EchoClass instance works"
+    }
+
+    public static def staticEcho() {
+        println "EchoClass static works"
+    }
+}
+
+
+

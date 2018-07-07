@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
 
-CR=$(printf '\r')
-
 main() {
     VERSION_NUMBER="1.0"
     VERSION_STRING=$'Cilo\t(Unix)\t'"$VERSION_NUMBER"
@@ -37,7 +35,7 @@ main() {
 
                 -l|--library <cilo-library-path>
                         Will load additional build libraries with the ".cilo" extension from this path.
-                        DEFAULT:   lib/
+                        DEFAULT:   cilib/
                         NOTE:      Must be relative to project with no leading slash and must have a trailing slash.
 
                 --log
@@ -81,7 +79,7 @@ main() {
     DOCKER_REGISTRY_URL=""
     DOCKER_IMAGE_NAME="cirrosoft/cilo"
     DOCKER_REBUILD="false"
-    LIBRARY_PATH="lib/"
+    LIBRARY_PATH="cilib/"
     LIBRARY_URL=""
     CREDENTIAL_SERVER_URL=""
 

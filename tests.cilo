@@ -1,4 +1,7 @@
 
+import com.cirrosoft.*
+import com.google.common.collect.HashBiMap
+
 step "Basic Step Form", {
     println "Basic Step Works"
 }
@@ -154,7 +157,27 @@ step "Variable Scope Combos", {
     }
 }
 
+
 step "Library Function", {
     echoString("Library function call works!")
+}
+
+step "Library Groovy Source", {
+    CirroGroovy cirro = new CirroGroovy();
+    cirro.printCirro()
+}
+
+step "Library Java Class", {
+    CirroJava cirro = new CirroJava();
+    cirro.printCirro()
+}
+
+step "Library Jar", {
+    HashBiMap<String, String> capitalCountryBiMap = HashBiMap.create();
+    capitalCountryBiMap.put("New Delhi", "India");
+    capitalCountryBiMap.put("Washington, D.C.", "USA");
+    capitalCountryBiMap.put("Moscow", "Russia");
+    String russia = capitalCountryBiMap.get("Moscow")
+    println "${russia} is the capital of Moscow."
 }
 

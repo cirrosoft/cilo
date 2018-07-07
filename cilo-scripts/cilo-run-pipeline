@@ -15,21 +15,22 @@ EOF`
     rm "${PIPELINE_FILE}"
     mv "${PIPELINE_FILE}.sub" "${PIPELINE_FILE}"
     # PREPROCESS LIBRARIES
-    tmpFiles=""
-    for file in /home/cilo/workspace/${LIBRARY_PATH}*; do
-        if ! [ "$file" = '*' ]; then
-            filename=`basename $file`
-            tmpFile="/home/cilo/tmp/$filename"
-            touch "$tmpFile"
-            echo "$BASE_IMPORT" >> "$tmpFile"
-            cat "${file}" >> "$tmpFile"
-            cat "${tmpFile}" | awk -f /home/cilo/bin/shell-substitution.awk > "${tmpFile}.sub"
-            rm "${tmpFile}"
-            mv "${tmpFile}.sub" "${tmpFile}"
-            tmpFiles="${filename} $tmpFiles"
+    for file in `find /home/cilo/workspace/${LIBRARY_PATH} -type f -name "*.cilo"`; do
+        if ! [ -d "$file" ]; then
+            if ! [ "$file" = '*' ]; then
+                filename=`basename $file`
+                tmpFile="/home/cilo/tmp/$filename"
+                touch "$tmpFile"
+                echo "$BASE_IMPORT" >> "$tmpFile"
+                cat "${file}" >> "$tmpFile"
+                cat "${tmpFile}" | awk -f /home/cilo/bin/shell-substitution.awk > "${tmpFile}.sub"
+                rm "${tmpFile}"
+                mv "${tmpFile}.sub" "${tmpFile}"
+            fi
         fi
     done
-    groovy -cp /home/cilo/bin/:/home/cilo/${LIBRARY_PATH} "${PIPELINE_FILE}" $tmpFiles
+    jarFiles=`find /home/cilo/workspace/${LIBRARY_PATH} -type f -name "*.jar" | tr '\n' ':'`
+    groovy -cp ${jarFiles}/home/cilo/bin/:/home/cilo/tmp/:/home/cilo/workspace/${LIBRARY_PATH} "${PIPELINE_FILE}"
 else
     echo "COULD NOT FIND PIPELINE FILE (${CILO_PIPELINE})."
 fi

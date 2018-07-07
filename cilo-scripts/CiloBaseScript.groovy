@@ -40,6 +40,7 @@ abstract class CiloBaseScript extends Script {
             GroovyClassLoader loader = new GroovyClassLoader(getClass().getClassLoader())
             Class groovyClass = loader.parseClass(sourceFile);
             GroovyObject myObject = (GroovyObject) groovyClass.newInstance();
+            // Class functions = Class.forName("functions.EchoClass")
             // Add methods
             myObject.metaClass.getMethods().stream()
                 .filter({
