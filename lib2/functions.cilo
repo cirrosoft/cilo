@@ -1,0 +1,8 @@
+
+def echoString(string) {
+    def variables = ["string": "${string}"]
+    env variables, {
+        $ echo "LIBRARY 2: $string"
+    }
+}
+
