@@ -8,14 +8,28 @@ import groovy.transform.BaseScript
 @BaseScript CiloBaseScript base
 
 EOF`
-    echo "$BASE_IMPORT" >> "$PIPELINE_FILE"    
+    # PREPROCESS PIPELINE
+    echo "$BASE_IMPORT" >> "$PIPELINE_FILE"
     cat "${CILO_PIPELINE}" >> "$PIPELINE_FILE"
-    # PREPROCESSOR
     cat "${PIPELINE_FILE}" | awk -f /home/cilo/bin/shell-substitution.awk > "${PIPELINE_FILE}.sub"
     rm "${PIPELINE_FILE}"
     mv "${PIPELINE_FILE}.sub" "${PIPELINE_FILE}"
-    # RUN
-    groovy -cp /home/cilo/bin/ "${PIPELINE_FILE}"
+    # PREPROCESS LIBRARIES
+    tmpFiles=""
+    for file in /home/cilo/workspace/${LIBRARY_PATH}*; do
+        if ! [ "$file" = '*' ]; then
+            filename=`basename $file`
+            tmpFile="/home/cilo/tmp/$filename"
+            touch "$tmpFile"
+            echo "$BASE_IMPORT" >> "$tmpFile"
+            cat "${file}" >> "$tmpFile"
+            cat "${tmpFile}" | awk -f /home/cilo/bin/shell-substitution.awk > "${tmpFile}.sub"
+            rm "${tmpFile}"
+            mv "${tmpFile}.sub" "${tmpFile}"
+            tmpFiles="${filename} $tmpFiles"
+        fi
+    done
+    groovy -cp /home/cilo/bin/:/home/cilo/${LIBRARY_PATH} "${PIPELINE_FILE}" $tmpFiles
 else
     echo "COULD NOT FIND PIPELINE FILE (${CILO_PIPELINE})."
 fi

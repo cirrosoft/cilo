@@ -1,0 +1,9 @@
+#!/usr/bin/env sh
+for file in /home/cilo/tmp/*; do
+    if ! [ "$file" = '*' ]; then
+        filename=`basename $file`
+        cat "$file" | openssl enc -a -d -pass pass:`printf $USER_KEY` -aes-256-cbc | openssl enc -a -pass pass:`printf $SECRET_KEY` -aes-256-cbc > "$file".enc
+        rm "$file" > /dev/null 2> /dev/null
+        mv "$file".enc "$file" > /dev/null 2> /dev/null
+    fi
+done

@@ -1,14 +1,60 @@
+import org.codehaus.groovy.control.CompilerConfiguration
+
 abstract class CiloBaseScript extends Script {
     abstract def runCode()
 
-    def steps = [:]
-    def secretsMap = [:]
-    def envMap = [:]
+    private static Boolean firstRun = true;
+    public static def steps = [:]
+    public static def secretsMap = [:]
+    public static def envMap = [:]
 
-    def stdOutInterceptor
-    def stdErrInterceptor
+    public static def stdOutInterceptor
+    public static def stdErrInterceptor
     
     def run() {
+        if (firstRun) {
+            firstRun = false
+        } else {
+            return
+        }
+        def allScripts = []
+        def dir = new File("/home/cilo/tmp/")
+        dir.eachFileRecurse(groovy.io.FileType.FILES) { file ->
+            def matcher = (file =~ /(.*)\.(.*)$/)
+            if (matcher.matches()) {
+                def name = matcher[0][1]
+                def extension = matcher[0][2]
+                if (extension in ['groovy', 'cilo']) {
+                    allScripts << file
+                }
+            }
+        }
+        for (sourceFile in allScripts) {
+            def matcher = (sourceFile =~ /(.*)\.(.*)$/)
+            def name=""
+            def extension=""
+            if (matcher.matches()) {
+                name = matcher[0][1]
+                extension = matcher[0][2]
+            }
+            Class groovyClass = new GroovyClassLoader(getClass().getClassLoader()).parseClass(sourceFile);
+            GroovyObject myObject = (GroovyObject) groovyClass.newInstance();
+            myObject.metaClass.getMethods().stream()
+                .filter({
+                    it ->
+                    methodName = it.getName()
+                    className = it.getDeclaringClass().getName()
+                    def matches = !(className in ["java.lang.Object", "groovy.lang.GroovyObjectSupport", "groovy.lang.Script", "CiloBaseScript"]) && !methodName.equals("runCode") && !methodName.equals("main")
+                    matches
+                }).each({
+                    it ->
+                    methodName = it.getName()
+                    this.metaClass."$methodName" = { Object... args ->
+                        it.invoke(myObject, args)
+                    }
+                })
+        }
+        // Secret Interception
         def interceptorClosure = { secretsMap, str ->
             def newString=str
             for (pair in secretsMap) {
@@ -30,8 +76,8 @@ abstract class CiloBaseScript extends Script {
         try {
             final result = runCode()
             for (step in steps) {
-                beforeEachStep()
                 println "----------------------------STEP (${step.key})-------------------------------------------"
+                beforeEachStep()
                 step.value() // run closure
                 afterEachStep()
             }
@@ -58,24 +104,25 @@ abstract class CiloBaseScript extends Script {
         
     }
 
-    def step(name, closure) {
+    public def step(name, closure) {
+        closure.delegate = this;
         steps[name] = closure
     }
     
-    def ciloShellScript(filename) {
+    public def ciloShellScript(filename) {
         shell("chmod 777 $filename")
         return shell("$filename")
     }
     
-    def shell(command) {
+    public def shell(command) {
         StringBuilder stdOut = new StringBuilder()
         StringBuilder stdErr = new StringBuilder()
         int exitCode = 1
-        env=[]
-        System.getenv().each{ k, v -> env<<"$k=$v" }
-        secretsMap.each{ k, v -> env<<"$k=$v" }
-        envMap.each{ k, v -> env<<"$k=$v" }
-        def proc = command.execute(env, new File("/home/cilo/workspace/"))
+        def environment=[]
+        System.getenv().each{ k, v -> environment<<"$k=$v" }
+        secretsMap.each{ k, v -> environment<<"$k=$v" }
+        envMap.each{ k, v -> environment<<"$k=$v" }
+        def proc = command.execute(environment, new File("/home/cilo/workspace/"))
         proc.in.eachLine { line ->
             def newString=line
             for (pair in secretsMap) {
@@ -96,12 +143,13 @@ abstract class CiloBaseScript extends Script {
         return ["stdOut":stdOut, "stdErr":stdErr, "exitCode":exitCode]
     }
 
-    def env(map, closure) {
+    public def env(map, closure) {
         for (pair in map) {
             def key=pair.key
             def value=pair.value
             envMap << ["${key}":"${value}"]
         }
+        closure.delegate = this;
         closure.call()
         for (pair in map) {
             def key=pair.key
@@ -110,7 +158,7 @@ abstract class CiloBaseScript extends Script {
         }
     }
     
-    def secret(name, closure) {
+    public def secret(name, closure) {
         shell("cilo-decrypt-secret ${name}")
         def nameText = "${name}Text"
         def nameBytes = "${name}Bytes"
@@ -126,6 +174,7 @@ abstract class CiloBaseScript extends Script {
         for (secretPair in secretsMap) {
             binding.setVariable(secretPair.key, secretPair.value)
         }
+        closure.delegate = this;
         closure.setBinding(binding)
         closure.call()
         secretsMap -= ["${name}":"${secretText}"]
@@ -134,7 +183,6 @@ abstract class CiloBaseScript extends Script {
         secretsMap -= ["${nameFile}":"/home/cilo/secret/${name}"]
         shell("rm /home/cilo/secret/${name}")
     }
-        
 }
 
 class SecretInterceptor extends java.io.FilterOutputStream {

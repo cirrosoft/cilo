@@ -1,11 +1,11 @@
 
 step "Simple Shell", {
-     $ echo "From shell works"
+     $ echo "Simple from shell works"
 }
 
 step "Mixed Shell", {
-    println "From groovy works"
-    $ echo "From shell works"
+    println "Mixed from groovy works"
+    $ echo "Mixed from shell works"
 }
 
 step "Multiline Shell", {
@@ -29,7 +29,7 @@ step "Control Flow Shell", {
 
 step "Shell Timing", {
     $ for i in `seq 1 10`; do
-    $   sleep 0.2
+    $   sleep 0.1
     $   echo "Slept for $i second total."
     $ done
 }
@@ -143,5 +143,9 @@ step "Variable Scope Combos", {
             }
         }
     }
+}
+
+step "Library Function", {
+    echoString("Library function call works!")
 }
 

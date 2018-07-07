@@ -760,7 +760,7 @@ dockerRunImage() {
                 log '===================================RUNNING SCRIPT===================================\n' "" ""
             fi
         fi
-        docker run -it --rm -v "$CILO_TEMP_DIRECTORY:/home/cilo/tmp" -v "$PWD:/home/cilo/workspace" --name "$2" $ENTRYPOINT -e SECRET_KEY="$SECRET_KEY" -e CILO_PIPELINE="$PIPELINE" "$1"
+        docker run -it --rm -v "$CILO_TEMP_DIRECTORY:/home/cilo/tmp" -v "$PWD:/home/cilo/workspace" --name "$2" $ENTRYPOINT -e SECRET_KEY="$SECRET_KEY" -e LIBRARY_PATH="$LIBRARY_PATH" -e CILO_PIPELINE="$PIPELINE" "$1"
     fi
 }
 
