@@ -37,8 +37,10 @@ abstract class CiloBaseScript extends Script {
                 name = matcher[0][1]
                 extension = matcher[0][2]
             }
-            Class groovyClass = new GroovyClassLoader(getClass().getClassLoader()).parseClass(sourceFile);
+            GroovyClassLoader loader = new GroovyClassLoader(getClass().getClassLoader())
+            Class groovyClass = loader.parseClass(sourceFile);
             GroovyObject myObject = (GroovyObject) groovyClass.newInstance();
+            // Add methods
             myObject.metaClass.getMethods().stream()
                 .filter({
                     it ->
@@ -49,7 +51,7 @@ abstract class CiloBaseScript extends Script {
                 }).each({
                     it ->
                     methodName = it.getName()
-                    this.metaClass."$methodName" = { Object... args ->
+                    this.metaClass."${methodName}" = { Object... args ->
                         it.invoke(myObject, args)
                     }
                 })

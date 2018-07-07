@@ -1,4 +1,12 @@
 
+step "Basic Step Form", {
+    println "Basic Step Works"
+}
+
+step("Alternate Step Form") {
+    println "Alternate Step Works"
+}
+
 step "Simple Shell", {
      $ echo "Simple from shell works"
 }
@@ -7,6 +15,7 @@ step "Mixed Shell", {
     println "Mixed from groovy works"
     $ echo "Mixed from shell works"
 }
+
 
 step "Multiline Shell", {
     $ echo "Multiline:"
