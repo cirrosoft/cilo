@@ -15,4 +15,3 @@ ADD cilo-scripts/ /home/cilo/bin/
 ENV PATH="/home/cilo/bin/:${PATH}"
 WORKDIR /home/cilo/workspace/
 ENTRYPOINT ["bash"]
-# CMD ["cilo-run-pipeline"]
