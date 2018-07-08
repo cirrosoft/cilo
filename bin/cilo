@@ -347,6 +347,7 @@ executeCommand() {
     if [ "$1" = "hash" ]; then
         shift;
         hashRandom
+        exit 0
     fi
     showUsage
     exit 1
@@ -541,7 +542,7 @@ decryptFile() {
 }
 
 hashRandom() {
-    runCiloBash "dd if=/dev/urandom bs=1028 count=1 2> /dev/null | openssl dgst -sha512 | cut -d ' ' -f2- | tr -d '\n' | tr -d '\r'"
+    runCiloBash "dd if=/dev/urandom bs=1024 count=1 2> /dev/null | openssl dgst -sha512 | cut -d ' ' -f2- | tr -d '\n' | tr -d '\r'"
 }
 
 hashFile() {
