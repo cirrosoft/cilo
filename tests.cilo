@@ -158,13 +158,13 @@ step "Variable Scope Combos", {
 }
 
 step "Library Function", {
-    def functions = Functions.new()
+    def functions = new Functions()
     def string = functions.echoString("Cilo library works!")
     println string
 }
 
 step "Library Function w/ Integration", {
-    def functions = Functions.new()
+    def functions = new Functions()
     def string = functions.echoStringIntegrated("Cilo library with builtin integration works!")
     println string
 }
