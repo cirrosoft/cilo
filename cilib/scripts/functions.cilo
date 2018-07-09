@@ -1,20 +1,25 @@
 
 def echoString(string) {
+    return string
+}
+
+def echoStringIntegrated(string) {
     def variables = ["string": "${string}"]
     env variables, {
         $ echo "$string"
     }
+    return stdOut
 }
 
-public class EchoClass {
-    public def echo() {
-        println "EchoClass instance works"
-    }
-
-    public static def staticEcho() {
-        println "EchoClass static works"
-    }
+public static def echoStringStatic(string) {
+    return string
 }
 
-
+public static def echoStringIntegratedStatic(string) {
+    def variables = ["string": "${string}"]
+    env variables, {
+        $ echo "$string"
+    }
+    return stdOut
+}
 

@@ -7,9 +7,16 @@ abstract class CiloBaseScript extends Script {
     public static def steps = [:]
     public static def secretsMap = [:]
     public static def envMap = [:]
+    
 
     public static def stdOutInterceptor
     public static def stdErrInterceptor
+    
+    // used by macro processor
+    public static def stdMap = [:]
+    public static def stdOut = ""
+    public static def stdErr = ""
+    public static def exitCode = 0
     
     def run() {
         if (firstRun) {
@@ -17,19 +24,75 @@ abstract class CiloBaseScript extends Script {
         } else {
             return
         }
-        def allScripts = []
+        def allCiloScripts = []
+        def allGroovyScripts = []
+        def allCiloInstances = []
         def dir = new File("/home/cilo/tmp/")
+        allCiloInstances << this
         dir.eachFileRecurse(groovy.io.FileType.FILES) { file ->
             def matcher = (file =~ /(.*)\.(.*)$/)
             if (matcher.matches()) {
                 def name = matcher[0][1]
                 def extension = matcher[0][2]
-                if (extension in ['groovy', 'cilo']) {
-                    allScripts << file
+                if (extension in ['cilo']) {
+                    allCiloScripts << file
+                    def loadedClass = this.class.classLoader.parseClass(file)
+                    allCiloInstances << loadedClass.newInstance()
+                }
+                if (extension in ['groovy']) {
+                    allGroovyScripts << file
                 }
             }
         }
-        for (sourceFile in allScripts) {
+        //   We at cilo call a cilo script cross reference a class clone
+        // Class clones are just instances of the object used in other classes.
+        // It is helpful for constructing instances and controlling behavour.
+        //          Remove instance methods from class clone
+        for (currentInstance in allCiloInstances) {
+            for (otherInstance in allCiloInstances) {
+                def currentClassName = currentInstance.class.getName()
+                def otherClassName = otherInstance.class.getName()
+                if (!currentClassName.equals(otherClassName)) {
+                    currentInstance.metaClass.getMethods().stream()
+                        .filter({
+                            it ->
+                            className = it.getDeclaringClass().getName()
+                            methodName = it.getName()
+                            def matches = !(className in [
+                                    "java.lang.Object",
+                                    "groovy.lang.GroovyObjectSupport",
+                                    "groovy.lang.Script",
+                                    "CiloBaseScript"]) &&
+                                !(methodName in ["runCode", "main"]) &&
+                                !it.isStatic()
+                            matches
+                        }).each({
+                            it ->
+                            className = it.getDeclaringClass().getName()
+                            methodName = it.getName()
+                            currentInstance.metaClass."${methodName}" = {
+                                throw new MissingMethodException("Static Class ${className} does not have static method ${methodName}.")
+                            }
+                        })
+                }
+            }
+        }
+        for (currentInstance in allCiloInstances) {
+            for (otherInstance in allCiloInstances) {
+                def currentClassName = currentInstance.class.getName()
+                def otherClassName = otherInstance.class.getName()
+                if (!currentClassName.equals(otherClassName)) {
+                    // Add constructors to class clone
+                    currentInstance.metaClass.static.new = { Object... objects ->
+                        currentInstance.class.newInstance(objects)
+                    }
+                    // Add object to class clone scope
+                    currentInstance.metaClass."${otherClassName}" = otherInstance
+                }
+                currentInstance.metaClass.initialize() // does this do anything?
+            }
+        }
+        for (sourceFile in allGroovyScripts) {
             def matcher = (sourceFile =~ /(.*)\.(.*)$/)
             def name=""
             def extension=""
@@ -107,17 +170,17 @@ abstract class CiloBaseScript extends Script {
         
     }
 
-    public def step(name, closure) {
+    public static def step(name, closure) {
         closure.delegate = this;
         steps[name] = closure
     }
-    
-    public def ciloShellScript(filename) {
+                    
+    public static def ciloShellScript(filename) {
         shell("chmod 777 $filename")
         return shell("$filename")
     }
     
-    public def shell(command) {
+    public static def shell(command) {
         StringBuilder stdOut = new StringBuilder()
         StringBuilder stdErr = new StringBuilder()
         int exitCode = 1
@@ -146,7 +209,7 @@ abstract class CiloBaseScript extends Script {
         return ["stdOut":stdOut, "stdErr":stdErr, "exitCode":exitCode]
     }
 
-    public def env(map, closure) {
+    public static def env(map, closure) {
         for (pair in map) {
             def key=pair.key
             def value=pair.value
@@ -161,7 +224,7 @@ abstract class CiloBaseScript extends Script {
         }
     }
     
-    public def secret(name, closure) {
+    public static def secret(name, closure) {
         shell("cilo-decrypt-secret ${name}")
         def nameText = "${name}Text"
         def nameBytes = "${name}Bytes"

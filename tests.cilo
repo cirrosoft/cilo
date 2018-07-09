@@ -3,20 +3,20 @@ import com.cirrosoft.*
 import com.google.common.collect.HashBiMap
 
 step "Basic Step Form", {
-    println "Basic Step Works"
+    println "Basic Step Works. "
 }
 
 step("Alternate Step Form") {
-    println "Alternate Step Works"
+    println "Alternate Step Works. "
 }
 
 step "Simple Shell", {
-     $ echo "Simple from shell works"
+     $ echo "Simple from shell works. "
 }
 
 step "Mixed Shell", {
     println "Mixed from groovy works"
-    $ echo "Mixed from shell works"
+    $ echo "Mixed from shell works. "
 }
 
 
@@ -157,9 +157,34 @@ step "Variable Scope Combos", {
     }
 }
 
-
 step "Library Function", {
-    echoString("Library function call works!")
+    def functions = Functions.new()
+    def string = functions.echoString("Cilo library works!")
+    println string
+}
+
+step "Library Function w/ Integration", {
+    def functions = Functions.new()
+    def string = functions.echoStringIntegrated("Cilo library with builtin integration works!")
+    println string
+}
+
+step "Static Library Function", {
+    def string = Functions.echoStringStatic("Static cilo library works!")
+    println string
+}
+
+step "Static Library Function w/ Integration", {
+    def string = Functions.echoStringStatic("Static cilo library with builtin integration works!")
+    println string
+}
+
+step "Library Won't Call Instance Method from Static Class", {
+    try {
+        Functions.echoString("Instance cilo library call should not work statically:(")
+    } catch (e) {
+        println "SUCCESS - Instance method call failed from static class."
+    }
 }
 
 step "Library Groovy Source", {
