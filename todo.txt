@@ -1,0 +1,12 @@
+1. Organize org secrets' directory.
+2. Cilo server client and endpoints.
+   a. GET    /org/{org}/{project}/{runName/{runNumber}
+   b. PUT    /org/{org}/{project}/{runName/{runNumber}
+   c. POST   /org/{org}/{project}/{runName}             (returns next number and starts build entry)
+   d. DELETE /org/{org}/{project}/{runName}/{runNumber}
+   e. GET    /org/{org}/{project}/{runName}/{runNumber}/log
+   f. PUT    /org/{org}/{project}/{runName}/{runNumber}/log
+   g. POST   /org/{org}/{project}/{runName}/{runNumber}/log
+   h. DELETE /org/{org}/{project}/{runName}/{runNumber}/log
+   i. GET    /org/{org}/role/{role}/secrets      (returns json with base64 encoded secrets per role)
+

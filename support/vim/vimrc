@@ -1,0 +1,2 @@
+highlight CiloBashLines ctermfg=Red guifg=Red 
+match CiloBashLines /^[ \t]*\$.*/

@@ -1,0 +1,36 @@
+
+step "Groovy Secret", {
+     secret "username", {
+            println "SECRET: ${username}"
+            println "SECRET_TEXT: ${usernameText}"
+            println "SECRET_BYTES: ${usernameBytes}"
+            println "SECRET_FILE: ${usernameFile}"
+     }
+}
+
+step "Bash Secret", {
+     secret "password", {
+            $ echo "FROM_SHELL-------SECRET: $password"
+            $ echo "FROM_SHELL--SECRET TEXT: $passwordText"
+            $ echo "FROM_SHELL-SECRET BYTES: $passwordBytes"
+            $ echo "FROM_SHELL--SECRET FILE: $passwordFile"
+     }
+}
+
+step "Nested Secrets", {
+     secret "username", {
+            secret "password", {
+                   println "USERNAME: ${username}"
+                   $ echo "PASSWORD: ${password}"
+            }
+     }    
+}
+
+step "Secret Combined Variables", {
+     def password = "itdoeswork86"
+     secret "username", {
+            println "USERNAME FROM SECRET--: $username"
+            println "PASSWORD FROM VARIABLE: $password"
+     }    
+}
+

@@ -1,0 +1,59 @@
+FROM microsoft/dotnet:2.2.102-sdk-alpine3.8
+
+# PACKAGES
+USER root
+RUN apk update &&\
+ apk add --no-cache bash &&\
+ apk add --no-cache openssh &&\
+ apk add --no-cache curl &&\
+ apk add --no-cache jq &&\
+ apk add --no-cache openssl &&\
+ apk add --no-cache emacs &&\
+ apk add --no-cache zip &&\
+    # docker
+ apk add --no-cache docker &&\
+    # needed by groovy
+ apk add --no-cache libstdc++ &&\
+ apk add --no-cache openjdk8 &&\
+    # needed by azure
+ apk add --no-cache py-pip &&\
+ apk add --virtual=build gcc libffi-dev musl-dev openssl-dev python-dev make
+ RUN addgroup -S cilogroup && adduser -S cilo -G cilogroup
+
+# SETUP DIRS
+USER cilo
+RUN echo 'export PS1="\u:\w$ "' >> ~/.bashrc &&\
+ echo 'alias docker="docker -H $HOST_ADDRESS"' >> ~/.bashrc &&\
+ mkdir -p /home/cilo/bin/ &&\
+ mkdir -p /home/cilo/secret/local/
+ADD cilo-scripts/ /home/cilo/bin/
+
+#INSTALL AZURE
+USER root
+RUN cd /home/cilo/ &&\
+ pip --no-cache-dir install -U pip && \
+ pip --no-cache-dir install azure-cli && \
+ apk del --purge build
+
+# INSTALL GROOVY START
+# groovy version taken from:  https://bintray.com/artifact/download/groovy/maven/apache-groovy-binary-2.4.8.zip
+USER root
+ADD image-support/groovy/ /home/groovy/
+RUN cd /home/groovy/ && unzip apache-groovy-binary-2.4.8.zip &&\
+ rm /bin/sh && ln -s /bin/bash /bin/sh
+ENV JAVA_HOME="/usr/lib/jvm/default-jvm/"
+ENV GROOVY_HOME="/home/groovy/groovy-2.4.8"
+ENV PATH="/home/groovy/groovy-2.4.8/bin/:${PATH}"
+
+# ENV
+USER root
+RUN mkdir -p /home/cilo/workspace/ &&\
+chown cilo /home/cilo/workspace/ &&\
+chmod 777 /home/cilo/workspace/
+ENV PATH="/home/cilo/bin/:${PATH}"
+ENV PATH="/home/cilo/.dotnet/:${PATH}"
+
+# ENTRY
+USER cilo
+WORKDIR /home/cilo/workspace/
+ENTRYPOINT ["bash"]

@@ -1,0 +1,24 @@
+def echoString(string) {
+    return string
+}
+
+def echoStringIntegrated(string) {
+    def variables = ["string": "${string}"]
+    env variables, {
+        $ echo "$string"
+    }
+    return stdOut
+}
+
+public static def echoStringStatic(string) {
+    return string
+}
+
+public static def echoStringIntegratedStatic(string) {
+    def variables = ["string": "${string}"]
+    env variables, {
+        $ echo "$string"
+    }
+    return stdOut
+}
+

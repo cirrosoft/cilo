@@ -1,0 +1,42 @@
+#!/usr/bin/env sh
+if [ -e "${CILOFILE}" ]; then
+    # BASE IMPORT
+    CILOFILE_FULLPATH="/home/cilo/tmp/${CILOFILE}"
+    touch "$CILOFILE_FULLPATH"
+    BASE_IMPORT=`cat <<EOF
+import groovy.transform.BaseScript
+@BaseScript CiloBaseScript base
+
+EOF`
+    # PREPROCESS CILOFILE
+    echo "$BASE_IMPORT" >> "$CILOFILE_FULLPATH"
+    cat "${CILOFILE}" >> "$CILOFILE_FULLPATH"
+    cat "${CILOFILE_FULLPATH}" | awk -f /home/cilo/bin/shell-substitution.awk > "${CILOFILE_FULLPATH}.sub"
+    rm "${CILOFILE_FULLPATH}"
+    mv "${CILOFILE_FULLPATH}.sub" "${CILOFILE_FULLPATH}"
+    # PREPROCESS LIBRARIES
+    if [ -d "/home/cilo/workspace/${LIBRARY_PATH}" ]; then
+        for file in `find /home/cilo/workspace/${LIBRARY_PATH} -type f -name "*.cilo"`; do
+            if ! [ -d "$file" ]; then
+                if ! [ "$file" = '*' ]; then
+                    dirname=`dirname $file`
+                    basename=`basename $file`
+                    extension="${basename##*.}"
+                    filename="${basename%.*}"
+                    tmpFile="/home/cilo/tmp/$filename"
+                    touch "${tmpFile}.cilo"
+                    echo "$BASE_IMPORT" >> "${tmpFile}.cilo"
+                    cat "${file}" >> "${tmpFile}.cilo"
+                    cat "${tmpFile}.cilo" | awk -f /home/cilo/bin/shell-substitution.awk > "${tmpFile}.groovy"
+                    rm "${tmpFile}.cilo"
+                fi
+            fi
+        done
+        jarFiles=`find /home/cilo/workspace/${LIBRARY_PATH} -type f -name "*.jar" | tr '\n' ':'`
+    else
+        jarFiles=""
+    fi
+    groovy -cp ${jarFiles}/home/cilo/bin/:/home/cilo/tmp/:/home/cilo/workspace/:/home/cilo/workspace/${LIBRARY_PATH} "${CILOFILE_FULLPATH}"
+else
+    echo "COULD NOT FIND CILOFILE (${CILOFILE})."
+fi
