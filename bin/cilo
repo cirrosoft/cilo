@@ -176,9 +176,9 @@ EOF`
     LIBRARY_URL=""
     CREDENTIAL_SERVER_URL=""
 
-    HOST_ADDRESS="localhost"
+    DOCKER_HOST_ADDRESS="localhost"
     if isWindows; then
-        HOST_ADDRESS="host.docker.internal"
+        DOCKER_HOST_ADDRESS="host.docker.internal"
     fi
 
     CILO_TEMP_DIRECTORY="$HOME/.cilo/tmp"
@@ -992,7 +992,7 @@ runCiloScript() {
         # encrypt secrets using generated token
         if ! $QUITE; then info "%s\n" "Encrypting secrets using generated token."; fi
         volumeOne=`convertPath "$CILO_TEMP_DIRECTORY:/home/cilo/tmp"`
-        docker run -t --rm -v "$volumeOne" --name "${PROJECT_NAME}-${RUN_NAME}-cilo-encrypt-temporary" -e SECRET_KEY="$SECRET_KEY" -e USER_KEY="$USER_KEY" -e HOST_ADDRESS="$HOST_ADDRESS" "$DOCKER_IMAGE_NAME" "cilo-encrypt-temporary" > /dev/null 2> /dev/null
+        docker run -t --rm -v "$volumeOne" --name "${PROJECT_NAME}-${RUN_NAME}-cilo-encrypt-temporary" -e SECRET_KEY="$SECRET_KEY" -e USER_KEY="$USER_KEY" -e DOCKER_HOST_ADDRESS="$DOCKER_HOST_ADDRESS" "$DOCKER_IMAGE_NAME" "cilo-encrypt-temporary" > /dev/null 2> /dev/null
         if ! [ "$?" = "0" ]; then
             error "%s\n" "Could not proccess secret(s). Make sure local secrets password is correct."
             exit 1
@@ -1018,7 +1018,7 @@ runCiloScript() {
             PTYPREFIX="winpty"
             WINI="i"
         fi
-        $PTYPREFIX docker run -${WINI}t --rm -v "$volumeOne" -v "$volumeTwo" --network="host" --name "$CONTAINER_NAME" $ENTRYPOINT -e SECRET_KEY="$SECRET_KEY" -e LIBRARY_PATH="$LIBRARY_PATH" -e CILOFILE="$CILOFILE" -e RUN_NAME="$RUN_NAME" -e RUN_NUMBER="$RUN_NUMBER" -e PROJECT_NAME="$PROJECT_NAME" -e HOST_ADDRESS="$HOST_ADDRESS" "$DOCKER_IMAGE_NAME"
+        $PTYPREFIX docker run -${WINI}t --rm -v "$volumeOne" -v "$volumeTwo" --network="host" --name "$CONTAINER_NAME" $ENTRYPOINT -e SECRET_KEY="$SECRET_KEY" -e LIBRARY_PATH="$LIBRARY_PATH" -e CILOFILE="$CILOFILE" -e RUN_NAME="$RUN_NAME" -e RUN_NUMBER="$RUN_NUMBER" -e PROJECT_NAME="$PROJECT_NAME" -e DOCKER_HOST_ADDRESS="$DOCKER_HOST_ADDRESS" "$DOCKER_IMAGE_NAME"
     fi
 }
 
@@ -1065,7 +1065,7 @@ runCiloBash() {
         fi
         volumeOne=`convertPath "$CILO_TEMP_DIRECTORY:/home/cilo/tmp"`
         volumeTwo=`convertPath "$PWD:/home/cilo/workspace"`
-        docker run -t --rm -v "$volumeOne" -v "$volumeTwo" --network="host" --name "$name" --entrypoint "bash" -e HOST_ADDRESS="$HOST_ADDRESS" "$DOCKER_IMAGE_NAME" -c "$command"        
+        docker run -t --rm -v "$volumeOne" -v "$volumeTwo" --network="host" --name "$name" --entrypoint "bash" -e DOCKER_HOST_ADDRESS="$DOCKER_HOST_ADDRESS" "$DOCKER_IMAGE_NAME" -c "$command"        
     fi
 }
 

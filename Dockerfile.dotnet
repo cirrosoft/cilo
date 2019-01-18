@@ -12,6 +12,7 @@ RUN apk update &&\
  apk add --no-cache zip &&\
     # docker
  apk add --no-cache docker &&\
+ apk add --no-cache expect &&\
     # needed by groovy
  apk add --no-cache libstdc++ &&\
  apk add --no-cache openjdk8 &&\
@@ -23,7 +24,7 @@ RUN apk update &&\
 # SETUP DIRS
 USER cilo
 RUN echo 'export PS1="\u:\w$ "' >> ~/.bashrc &&\
- echo 'alias docker="docker -H $HOST_ADDRESS"' >> ~/.bashrc &&\
+ echo 'docker() { unbuffer -p docker -H "$DOCKER_HOST_ADDRESS" $@ ; }' >> ~/.bashrc &&\
  mkdir -p /home/cilo/bin/ &&\
  mkdir -p /home/cilo/secret/local/
 ADD cilo-scripts/ /home/cilo/bin/

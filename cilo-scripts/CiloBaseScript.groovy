@@ -223,14 +223,51 @@ abstract class CiloBaseScript extends Script {
         if (isInsideSshClosure) {
             shell("touch ${filename}.ssh", false)
             shell("chmod 700 ${filename}.ssh", false)
+            shell("touch ${filename}.bash", false)
+            shell("chmod 700 ${filename}.bash", false)
+            def file = new File("${filename}")
             def sshFile = new File("${filename}.ssh")
-            sshFile << "#!/usr/bin/env sh\n"
-            sshFile << "ssh -o \"StrictHostKeyChecking no\" -i ${sshBoundIdentityFile} ${sshBoundAddress} 'bash -s' < ${filename}\n"
-            // TODO: pass envMap through ssh.
+            def bashWithEnvFile = new File("${filename}.bash")
+            // Environmental variables are written to the script executed through ssh.
+            // Before thinking of another way to do this look at stack overflow article below:
             //  StackOverflow: https://stackoverflow.com/questions/4409951/can-i-forward-env-variables-over-ssh
+            def environment=[]
+            def allowedEnvs = ["PROJECT_NAME", "RUN_NUMBER", "RUN_NAME", "CILOFILE"]
+            System.getenv().each{ k, v ->
+                allowedEnvs.each { a ->
+                    if (a.equals(k)) {
+                        environment<<"""read -r -d '' $k <<'EOM'
+$v
+EOM"""
+                    }
+                }
+            }
+            secretsMap.each{ 
+                k, v -> environment<<"""read -r -d '' $k <<'EOM'
+$v
+EOM"""}
+            envMap.each{ k, v -> environment<<"""read -r -d '' $k <<'EOM'
+$v
+EOM"""}
+            List<String> lines = file.readLines();
+            // copy lines from file inserting into line 2 just after the shebang statement.
+            for (int lineIndex = 0; lineIndex < lines.size(); lineIndex++) {
+                def line = lines[lineIndex]
+                if (lineIndex == 1) {
+                    environment.each{
+                        s ->
+                            bashWithEnvFile << "$s\n"
+                    }
+                }
+                bashWithEnvFile << "$line\n"
+            }
+            sshFile << "#!/usr/bin/env bash\n"
+            sshFile << "ssh -o \"StrictHostKeyChecking no\" -i ${sshBoundIdentityFile} ${sshBoundAddress} 'bash -s' < ${filename}.bash\n"
             println "Attempting to run ssh script at \"${sshBoundAddress}\" using identity \"${sshBoundIdentityFile}\""
             def shReturn = shell("${filename}.ssh")
             sshFile.delete()
+            bashWithEnvFile.delete()
+            file.delete()
             return shReturn
         } else {
             return shell("${filename}")
