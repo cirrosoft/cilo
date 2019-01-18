@@ -82,8 +82,8 @@ step "Variable Scope", {
     ]
     env variables, {
         def inner = "Inner scope"        
-        println "Inner: ${outer}"
-        println "Outer: ${inner}"
+        println "Inner: ${inner}"
+        println "Outer: ${outer}"
     }
 }
 
@@ -93,73 +93,73 @@ step "Git Information", {
 }
 
 step "Groovy Secret", {
-     secret "username", {
-            println "Secret------: ${username}"
-            println "Secret Text-: ${usernameText}"
-            println "Secret Bytes: ${usernameBytes}"
-            println "Secret File-: ${usernameFile}"
+     secret "testUsername", {
+            println "Secret------: ${testUsername}"
+            println "Secret Text-: ${testUsernameText}"
+            println "Secret Bytes: ${testUsernameBytes}"
+            println "Secret File-: ${testUsernameFile}"
      }
 }
 
 step "Bash Secret", {
-     secret "password", {
-            $ echo "From shell-------Secret: $password"
-            $ echo "From shell--Secret Text: $passwordText"
-            $ echo "From shell-Secret Bytes: $passwordBytes"
-            $ echo "From shell--Secret File: $passwordFile"
+     secret "testPassword", {
+            $ echo "From shell-------Secret: $testPassword"
+            $ echo "From shell--Secret Text: $testPasswordText"
+            $ echo "From shell-Secret Bytes: $testPasswordBytes"
+            $ echo "From shell--Secret File: $testPasswordFile"
      }
 }
 
 step "Multiple Secrets", {
-    secrets(["username", "password", "cirrosoftAwsServerTestAddress"]) {
-            println "username: ${username}"
-            println "password: ${usernameText}"
-            println "cirrosoftAwsServerTestTddress: ${cirrosoftAwsServerTestAddress}"
+    secrets(["testUsername", "testPassword", "testAddress"]) {
+            println "testUsername: ${testUsername}"
+            println "testPassword: ${testUsernameText}"
+            println "testAddress: ${testAddress}"
     }
 }
 
 step "All Secrets", {
-    secrets(["username", "password", "cirrosoftAwsServerTestAddress", "cirrosoftAwsPem"]) {
-        println "Secret------: ${username}"
-        println "Secret Text-: ${usernameText}"
-        println "Secret Bytes: ${usernameBytes}"
-        println "Secret File-: ${usernameFile}"
-        $ echo "From shell-------Secret: $password"
-        $ echo "From shell--Secret Text: $passwordText"
-        $ echo "From shell-Secret Bytes: $passwordBytes"
-        $ echo "From shell--Secret File: $passwordFile"
-        println "cirrosoftAwsServerTestAddress------: ${cirrosoftAwsServerTestAddress}"
-        println "cirrosoftAwsServerTestAddressBytes-: ${cirrosoftAwsServerTestAddressBytes}"
-        println "cirrosoftAwsServerTestAddressText--: ${cirrosoftAwsServerTestAddressText}"
-        println "cirrosoftAwsServerTestAddressFile--: ${cirrosoftAwsServerTestAddressFile}"
-        println "cirrosoftAwsPem--------------------: ${cirrosoftAwsPem}"
-        println "cirrosoftAwsPemBytes---------------: ${cirrosoftAwsPemBytes}"
-        println "cirrosoftAwsPemText----------------: ${cirrosoftAwsPemText}"
-        println "cirrosoftAwsPemFile----------------: ${cirrosoftAwsPemFile}"
+    secrets(["testUsername", "testPassword", "testAddress", "testPrivateKey"]) {
+        println "Secret------: ${testUsername}"
+        println "Secret Text-: ${testUsernameText}"
+        println "Secret Bytes: ${testUsernameBytes}"
+        println "Secret File-: ${testUsernameFile}"
+        $ echo "From shell-------Secret: $testPassword"
+        $ echo "From shell--Secret Text: $testPasswordText"
+        $ echo "From shell-Secret Bytes: $testPasswordBytes"
+        $ echo "From shell--Secret File: $testPasswordFile"
+        println "testAddress------: ${testAddress}"
+        println "testAddressBytes-: ${testAddressBytes}"
+        println "testAddressText--: ${testAddressText}"
+        println "testAddressFile--: ${testAddressFile}"
+        println "testPrivateKey--------------------: ${testPrivateKey}"
+        println "testPrivateKeyBytes---------------: ${testPrivateKeyBytes}"
+        println "testPrivateKeyText----------------: ${testPrivateKeyText}"
+        println "testPrivateKeyFile----------------: ${testPrivateKeyFile}"
     }
 }
 
 
 step "Nested Secrets", {
-     secret "username", {
-            secret "password", {
-                   println "USERNAME: ${username}"
-            $ echo "Password: ${password}"
+     secret "testUsername", {
+            secret "testPassword", {
+                   println "USERNAME: ${testUsername}"
+            $ echo "Password: ${testPassword}"
             }
      }    
 }
 
 step "Secret Combined Variables", {
-     def password = "itdoeswork86"
-     secret "username", {
-            println "Username from Secret--: $username"
-            println "Password from Variable: $password"
+     def testPassword = "itdoeswork86"
+     secret "testUsername", {
+            println "Username from Secret--: $testUsername"
+            println "Password from Variable: $testPassword"
      }    
 }
 
 step "Secret Scope", {
     def outer = "Outer scope"
-    secret "username", {
+    secret "testUsername", {
         def inner = "Inner scope"
         println "Groovy Variable Outer: ${outer}"
         println "Groovy Variable Inner: ${inner}"
@@ -176,11 +176,11 @@ step "Variable Scope Combos", {
     def outer = "Outer scope"
     env outerVariables, {
         def middle1 = "Middle1 scope"
-        secret "username", {
+        secret "testUsername", {
             def middle2 = "Middle2 scope"
             env innerVariables, {
                 def middle3 = "Middle3 scope"
-                secret "password", {
+                secret "testPassword", {
                     def inner = "Inner scope"
                     println "Groovy Variable Outer--: ${outer}"
                     println "Groovy Variable Middle1: ${middle1}"
@@ -251,28 +251,40 @@ step "Library Jar", {
 }
 
 step "Groovy Secret 2", {
-     secret "username", {
-            println "Secret------: ${username}"
-            println "Secret Text-: ${usernameText}"
-            println "Secret Bytes: ${usernameBytes}"
-            println "Secret File-: ${usernameFile}"
+     secret "testUsername", {
+            println "Secret------: ${testUsername}"
+            println "Secret Text-: ${testUsernameText}"
+            println "Secret Bytes: ${testUsernameBytes}"
+            println "Secret File-: ${testUsernameFile}"
      }
 }
 
 step "Bash Secret 2", {
-     secret "password", {
-            $ echo "From shell-------Secret: $password"
-            $ echo "From shell--Secret Text: $passwordText"
-            $ echo "From shell-Secret Bytes: $passwordBytes"
-            $ echo "From shell--Secret File: $passwordFile"
+     secret "testPassword", {
+            $ echo "From shell-------Secret: $testPassword"
+            $ echo "From shell--Secret Text: $testPasswordText"
+            $ echo "From shell-Secret Bytes: $testPasswordBytes"
+            $ echo "From shell--Secret File: $testPasswordFile"
      }
 }
 
 step "SSH", {
-    secrets(["cirrosoftAwsServerTestAddress", "cirrosoftAwsPem"]) {
-        ssh("ec2-user@${cirrosoftAwsServerTestAddress}", "${cirrosoftAwsPemFile}") {
+    secrets(["testUsername", "testAddress", "testPrivateKey"]) {
+        ssh("${testUsername}@${testAddress}", "${testPrivateKeyFile}") {
             $ uname -a
             $ env
+        }
+    }
+}
+
+step "SSH Secrets Build Info", {
+    secrets(["testUsername", "testAddress", "testPrivateKey"]) {
+        ssh("${testUsername}@${testAddress}", "${testPrivateKeyFile}") {
+            $ echo "External Address: ${testAddress}"
+            $ echo "Project Name: ${PROJECT_NAME}"
+            $ echo "Run Number: ${RUN_NUMBER}"
+            $ echo "Run Name: ${RUN_NAME}"
+            $ echo "Cilo File: ${CILOFILE}"
         }
     }
 }
