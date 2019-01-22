@@ -1,0 +1,26 @@
+FROM alpine
+USER root
+RUN apk add --no-cache bash &&\
+    apk add --no-cache curl &&\
+    apk add --no-cache jq &&\
+    addgroup -S cilogroup && adduser -S cilo -G cilogroup &&\
+    # docker
+    apk add --no-cache docker &&\
+    apk add --no-cache expect &&\
+    # git
+    apk add --no-cache git
+
+USER cilo
+RUN echo 'export PS1="\u:\w$ "' >> ~/.bashrc &&\
+    echo 'source /home/cilo/completions/cilo-complete.sh' >> ~/.bashrc &&\
+    echo 'docker() { unbuffer -p docker -H "$DOCKER_HOST_ADDRESS" $@ ; }' >> ~/.bashrc &&\
+    mkdir -p /home/cilo/bin/ &&\
+    mkdir -p /home/cilo/completions/ &&\
+    mkdir -p /home/cilo/manpages/
+ADD ./bin/ /home/cilo/bin/
+ADD completions/ /home/cilo/completions/
+ADD manpages/ /home/cilo/manpages/
+ENV PATH="/home/cilo/bin/:${PATH}"
+WORKDIR /home/cilo/workspace/
+ENTRYPOINT ["/home/cilo/bin/cilo"]
+#ENTRYPOINT ["bash"]

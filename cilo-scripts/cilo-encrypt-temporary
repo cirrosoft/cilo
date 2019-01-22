@@ -1,6 +1,6 @@
 #!/usr/bin/env sh
-for file in /home/cilo/tmp/secret/local/*.enc; do
-    if ! [ "$file" = '/home/cilo/tmp/secret/local/*.enc' ]; then
+for file in /home/cilo/.cilo/tmp/secret/local/*.enc; do
+    if ! [ "$file" = '/home/cilo/.cilo/tmp/secret/local/*.enc' ]; then
         filename=`basename $file`
         cat "$file" | openssl enc -a -d -pass pass:`printf $USER_KEY` -aes-256-cbc | openssl enc -a -pass pass:`printf $SECRET_KEY` -aes-256-cbc > "$file".tmp 2> "$file".err.tmp
         cat "$file".err.tmp | grep "bad decrypt" > /dev/null 2> /dev/null

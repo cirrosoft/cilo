@@ -180,6 +180,16 @@ EOF`
     if isWindows; then
         DOCKER_HOST_ADDRESS="host.docker.internal"
     fi
+    if ! [ -z ${CILO_IS_WINDOWS+x} ]; then
+        DOCKER_HOST_ADDRESS="host.docker.internal"
+    fi
+    # 
+    # TODO: Use original volumes when mounting a container in a container.
+    #
+    DOCKER_HOST_OPTION=""
+    if ! [ -z ${CILO_BOOTSTRAP+x} ]; then
+        DOCKER_HOST_OPTION="-H ${DOCKER_HOST_ADDRESS}"
+    fi
 
     CILO_TEMP_DIRECTORY="$HOME/.cilo/tmp"
     CILO_SECRET_DIRECTORY="$HOME/.cilo/secret"
@@ -567,7 +577,7 @@ verifyPasswordForFile() {
         password="$2"
     fi
     cp $1 $CILO_TEMP_DIRECTORY/$filename > /dev/null 2> /dev/null
-    runCiloBash "cat /home/cilo/tmp/$filename | openssl enc -pass pass:\"$password\" -a -d -aes-256-cbc" | grep "bad decrypt" > /dev/null 2> /dev/null
+    runCiloBash "cat /home/cilo/.cilo/tmp/$filename | openssl enc -pass pass:\"$password\" -a -d -aes-256-cbc" | grep "bad decrypt" > /dev/null 2> /dev/null
     if [ "$?" = "0" ]; then
         rm $CILO_TEMP_DIRECTORY/$filename > /dev/null 2> /dev/null
         false
@@ -583,7 +593,7 @@ encryptFile() {
         password="$2"
     fi
     cp $1 $CILO_TEMP_DIRECTORY/$filename > /dev/null 2> /dev/null
-    runCiloBash "cat /home/cilo/tmp/$filename | openssl enc -pass pass:\"$password\" -a -aes-256-cbc"
+    runCiloBash "cat /home/cilo/.cilo/tmp/$filename | openssl enc -pass pass:\"$password\" -a -aes-256-cbc"
     if ! [ "$?" = "0" ]; then
         echo "Cilo password is not valid for secret ($name)."
         exit 1
@@ -592,13 +602,13 @@ encryptFile() {
 }
 
 decryptFile() {
-    local filename=encryptFile
+    local filename=decryptFile
     local password=`getCiloPasswordHash`
     if ! [ -z ${2+1} ]; then
         password="$2"
     fi
     cp $1 $CILO_TEMP_DIRECTORY/$filename > /dev/null 2> /dev/null
-    runCiloBash "cat /home/cilo/tmp/$filename | openssl enc -pass pass:\"$password\" -a -d -aes-256-cbc"
+    runCiloBash "cat /home/cilo/.cilo/tmp/$filename | openssl enc -pass pass:\"$password\" -a -d -aes-256-cbc"
     if ! [ "$?" = "0" ]; then
         rm $CILO_TEMP_DIRECTORY/$filename > /dev/null 2> /dev/null
         echo "Cilo password is not valid for secret ($name)."
@@ -614,7 +624,7 @@ hashRandom() {
 hashFile() {
     local filename=encryptFile
     cp $1 $CILO_TEMP_DIRECTORY/$filename > /dev/null 2> /dev/null
-    runCiloBash "cat /home/cilo/tmp/$filename | openssl dgst -sha512 | cut -d ' ' -f2- | tr -d '\n' | tr -d '\r'"
+    runCiloBash "cat /home/cilo/.cilo/tmp/$filename | openssl dgst -sha512 | cut -d ' ' -f2- | tr -d '\n' | tr -d '\r'"
     rm $CILO_TEMP_DIRECTORY/$filename > /dev/null 2> /dev/null
 }
 
@@ -897,15 +907,24 @@ copyGitInformation() {
 }
 
 dockerGet() {
-    curl -s --unix-socket "$DOCKER_SOCKET" "http:$1" 2>&1
+    if ! [ -z ${DOCKER_HOST_ADDRESS+x} ]; then
+        curl -s "${DOCKER_HOST_ADDRESS}:2375" "http:$1" 2>&1
+    else
+        curl -s --unix-socket "$DOCKER_SOCKET" "http:$1" 2>&1
+    fi
+
 }
 
 dockerPost() {
-    curl --post301 -s --unix-socket "$DOCKER_SOCKET" "http:$1" 2>&1
+    if ! [ -z ${DOCKER_HOST_ADDRESS+x} ]; then
+        curl --post301 -s "${DOCKER_HOST_ADDRESS}:2375" "http:$1" 2>&1
+    else
+        curl --post301 -s --unix-socket "$DOCKER_SOCKET" "http:$1" 2>&1
+    fi
 }
 
 dockerHasImage() {
-    if ! [[ `docker images -q "$1" 2> /dev/null` == "" ]]; then
+    if ! [[ `docker ${DOCKER_HOST_OPTION} images -q "$1" 2> /dev/null` == "" ]]; then
         true
     else
         false
@@ -935,7 +954,7 @@ dockerCreateImage() {
         if [ -e "$PWD/cilo-scripts/cilo-build-image" ]; then
             dockerBuildFromMainProject
         else
-            docker pull "$1"
+            docker ${DOCKER_HOST_OPTION} pull "$1"
             if [[ "$(($?))" -eq "0" ]]; then
                 info "%s\n" "Pulled cilo docker image."
             else
@@ -943,7 +962,7 @@ dockerCreateImage() {
             fi
         fi
     else
-        docker pull "$1"
+        docker ${DOCKER_HOST_OPTION} pull "$1"
         if [[ "$(($?))" -eq "0" ]]; then
             info "%s\n" "Pulled cilo docker image."
         else
@@ -963,20 +982,20 @@ runCiloScript() {
     fi
     CONTAINER_NAME="${PROJECT_NAME}-${RUN_NAME}"
     # if ! $QUITE; then info "%s\n" "Killing previous docker image ($CONTAINER_NAME)."; fi
-    docker kill "$CONTAINER_NAME" > /dev/null 2>&1
+    docker ${DOCKER_HOST_OPTION} kill "$CONTAINER_NAME" > /dev/null 2>&1
     # if ! $QUITE; then info "%s\n" "Removing previous docker image ($CONTAINER_NAME)."; fi
-    docker rm -f "$CONTAINER_NAME"  > /dev/null 2>&1
-    if [ ! "$(docker ps -q -f name=$CONTAINER_NAME)" ]; then
-        if [ "$(docker ps -aq -f status=exited -f name=$CONTAINER_NAME)" ]; then
+    docker ${DOCKER_HOST_OPTION} rm -f "$CONTAINER_NAME"  > /dev/null 2>&1
+    if [ ! "$(docker ${DOCKER_HOST_OPTION} ps -q -f name=$CONTAINER_NAME)" ]; then
+        if [ "$(docker ${DOCKER_HOST_OPTION} ps -aq -f status=exited -f name=$CONTAINER_NAME)" ]; then
             if ! $QUITE; then info "%s\n" "Removing previous docker image ($CONTAINER_NAME) after exit."; fi
-            docker rm -f "$(docker ps -aq -f status=exited -f name=$CONTAINER_NAME)" > /dev/null 2>&1
+            docker ${DOCKER_HOST_OPTION} rm -f "$(docker ${DOCKER_HOST_OPTION} ps -aq -f status=exited -f name=$CONTAINER_NAME)" > /dev/null 2>&1
         fi
         # prepare local secrets for cilofile
         local USER_KEY=`getCiloPasswordHash`
         # if ! $QUITE; then info "%s\n" "Generating secret token for container ($DOCKER_IMAGE_NAME)."; fi
         local SECRET_KEY=`hashRandom`
         if ! $QUITE; then info "%s\n" "Preparing secrets:"; fi
-        rm $CILO_TEMP_DIRECTORY/* 2> /dev/null
+        # rm $CILO_TEMP_DIRECTORY/* 2> /dev/null
         for file in $CILO_SECRET_DIRECTORY/local/*.enc; do
             if ! [ "$file" = "$CILO_SECRET_DIRECTORY/local/*.enc" ]; then
                 local dirname=`dirname $file`
@@ -991,8 +1010,13 @@ runCiloScript() {
         done
         # encrypt secrets using generated token
         if ! $QUITE; then info "%s\n" "Encrypting secrets using generated token."; fi
-        volumeOne=`convertPath "$CILO_TEMP_DIRECTORY:/home/cilo/tmp"`
-        docker run -t --rm -v "$volumeOne" --name "${PROJECT_NAME}-${RUN_NAME}-cilo-encrypt-temporary" -e SECRET_KEY="$SECRET_KEY" -e USER_KEY="$USER_KEY" -e DOCKER_HOST_ADDRESS="$DOCKER_HOST_ADDRESS" "$DOCKER_IMAGE_NAME" "cilo-encrypt-temporary" > /dev/null 2> /dev/null
+        volumeOne=`convertPath "$CILO_TEMP_DIRECTORY:/home/cilo/.cilo/tmp"`
+        MOUNTS="-v $volumeOne"
+        if ! [ -z ${CILO_BOOTSTRAP+x} ]; then
+            volumeOne=`convertPath "$CILO_HOST_HOME/.cilo/tmp:/home/cilo/.cilo/tmp"`
+            MOUNTS="-v $volumeOne ${CILO_MOUNTS}"
+        fi
+        docker ${DOCKER_HOST_OPTION} run -t --rm ${MOUNTS} --name "${PROJECT_NAME}-${RUN_NAME}-cilo-encrypt-temporary" -e SECRET_KEY="$SECRET_KEY" -e USER_KEY="$USER_KEY" -e DOCKER_HOST_ADDRESS="$DOCKER_HOST_ADDRESS" "$DOCKER_IMAGE_NAME" "cilo-encrypt-temporary" > /dev/null 2> /dev/null
         if ! [ "$?" = "0" ]; then
             error "%s\n" "Could not proccess secret(s). Make sure local secrets password is correct."
             exit 1
@@ -1010,7 +1034,7 @@ runCiloScript() {
             fi
         fi
         info '================================================================================\n' "" ""
-        volumeOne=`convertPath "$CILO_TEMP_DIRECTORY:/home/cilo/tmp"`
+        volumeOne=`convertPath "$CILO_TEMP_DIRECTORY:/home/cilo/.cilo/tmp"`
         volumeTwo=`convertPath "$PWD:/home/cilo/workspace"`
         PTYPREFIX=""
         WINI=""
@@ -1018,7 +1042,12 @@ runCiloScript() {
             PTYPREFIX="winpty"
             WINI="i"
         fi
-        $PTYPREFIX docker run -${WINI}t --rm -v "$volumeOne" -v "$volumeTwo" --network="host" --name "$CONTAINER_NAME" $ENTRYPOINT -e SECRET_KEY="$SECRET_KEY" -e LIBRARY_PATH="$LIBRARY_PATH" -e CILOFILE="$CILOFILE" -e RUN_NAME="$RUN_NAME" -e RUN_NUMBER="$RUN_NUMBER" -e PROJECT_NAME="$PROJECT_NAME" -e DOCKER_HOST_ADDRESS="$DOCKER_HOST_ADDRESS" "$DOCKER_IMAGE_NAME"
+        MOUNTS="-v $volumeOne"
+        if ! [ -z ${CILO_BOOTSTRAP+x} ]; then
+            volumeOne=`convertPath "$CILO_HOST_HOME/.cilo/tmp:/home/cilo/.cilo/tmp"`
+            MOUNTS="-v $volumeOne ${CILO_MOUNTS}"
+        fi
+        $PTYPREFIX docker ${DOCKER_HOST_OPTION} run -${WINI}t --rm ${MOUNTS} --network="host" --name "$CONTAINER_NAME" $ENTRYPOINT -e SECRET_KEY="$SECRET_KEY" -e LIBRARY_PATH="$LIBRARY_PATH" -e CILOFILE="$CILOFILE" -e RUN_NAME="$RUN_NAME" -e RUN_NUMBER="$RUN_NUMBER" -e PROJECT_NAME="$PROJECT_NAME" -e DOCKER_HOST_ADDRESS="$DOCKER_HOST_ADDRESS" "$DOCKER_IMAGE_NAME"
     fi
 }
 
@@ -1057,20 +1086,25 @@ isWindows() {
 runCiloBash() {
     local name="${PROJECT_NAME}-${RUN_NAME}-single-command"
     local command="$1"
-    docker kill "$name" > /dev/null 2>&1
-    docker rm -f "$name"  > /dev/null 2>&1
-    if [ ! "$(docker ps -q -f name=$name)" ]; then
-        if [ "$(docker ps -aq -f status=exited -f name=$name)" ]; then
-            docker rm -f "$(docker ps -aq -f status=exited -f name=$name)" > /dev/null 2>&1
+    docker ${DOCKER_HOST_OPTION}  kill "$name" > /dev/null 2>&1
+    docker ${DOCKER_HOST_OPTION} rm -f "$name"  > /dev/null 2>&1
+    if [ ! "$(docker ${DOCKER_HOST_OPTION} ps -q -f name=$name)" ]; then
+        if [ "$(docker ${DOCKER_HOST_OPTION} ps -aq -f status=exited -f name=$name)" ]; then
+            docker ${DOCKER_HOST_OPTION} rm -f "$(docker ${DOCKER_HOST_OPTION} ps -aq -f status=exited -f name=$name)" > /dev/null 2>&1
         fi
-        volumeOne=`convertPath "$CILO_TEMP_DIRECTORY:/home/cilo/tmp"`
+        volumeOne=`convertPath "$CILO_TEMP_DIRECTORY:/home/cilo/.cilo/tmp"`
         volumeTwo=`convertPath "$PWD:/home/cilo/workspace"`
-        docker run -t --rm -v "$volumeOne" -v "$volumeTwo" --network="host" --name "$name" --entrypoint "bash" -e DOCKER_HOST_ADDRESS="$DOCKER_HOST_ADDRESS" "$DOCKER_IMAGE_NAME" -c "$command"        
+        MOUNTS="-v $volumeOne"
+        if ! [ -z ${CILO_BOOTSTRAP+x} ]; then
+            volumeOne=`convertPath "$CILO_HOST_HOME/.cilo/tmp:/home/cilo/.cilo/tmp"`
+            MOUNTS="-v $volumeOne ${CILO_MOUNTS}"
+        fi
+        docker ${DOCKER_HOST_OPTION} run -t --rm ${MOUNTS} --network="host" --name "$name" --entrypoint "bash" -e DOCKER_HOST_ADDRESS="$DOCKER_HOST_ADDRESS" "$DOCKER_IMAGE_NAME" -c "$command"
     fi
 }
 
 validateDocker() {
-    if [ -S $DOCKER_SOCKET ]; then
+    if [ -S $DOCKER_SOCKET ] || ! [ -z ${DOCKER_HOST_ADDRESS+x} ]; then
         local CURL_RESULT=`dockerGet /ping`
         local JQ_RESULT=`printf "%s" "$CURL_RESULT" | jq -r '.message' 2>&1`
         if ! [ "$JQ_RESULT" = "page not found" ]; then
@@ -1078,7 +1112,7 @@ validateDocker() {
             exit 1
         fi
     else
-        error "$s\n" "Docker could not be found. Either docker is not running or the socket could not be found in location ($DOCKER_SOCKET)"
+        error "$s\n" "Docker could not be found. Either docker is not running or the socket/address could not be found in location ($DOCKER_SOCKET or $DOCKER_HOST_ADDRESS)"
     fi
 }
 
@@ -1089,13 +1123,13 @@ ctrl_c() {
     info "%s\n" "PROCESS ABORTED BY USER."
     
     local name1="${PROJECT_NAME}-${RUN_NAME}"
-    docker kill "$name1" > /dev/null 2>&1
+    docker ${DOCKER_HOST_OPTION} kill "$name1" > /dev/null 2>&1
     
     local name2="${PROJECT_NAME}-single-command"
-    docker kill "$name2" > /dev/null 2>&1
+    docker ${DOCKER_HOST_OPTION} kill "$name2" > /dev/null 2>&1
 
     local name3="${PROJECT_NAME}-${RUN_NAME}-cilo-encrypt-temporary"
-    docker kill "$name3" > /dev/null 2>&1
+    docker ${DOCKER_HOST_OPTION} kill "$name3" > /dev/null 2>&1
     
     cleanup
 }

@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 if [ -e "${CILOFILE}" ]; then
     # BASE IMPORT
-    CILOFILE_FULLPATH="/home/cilo/tmp/${CILOFILE}"
+    CILOFILE_FULLPATH="/home/cilo/.cilo/tmp/${CILOFILE}"
     touch "$CILOFILE_FULLPATH"
     BASE_IMPORT=`cat <<EOF
 import groovy.transform.BaseScript
@@ -23,7 +23,7 @@ EOF`
                     basename=`basename $file`
                     extension="${basename##*.}"
                     filename="${basename%.*}"
-                    tmpFile="/home/cilo/tmp/$filename"
+                    tmpFile="/home/cilo/.cilo/tmp/$filename"
                     touch "${tmpFile}.cilo"
                     echo "$BASE_IMPORT" >> "${tmpFile}.cilo"
                     cat "${file}" >> "${tmpFile}.cilo"
@@ -36,7 +36,7 @@ EOF`
     else
         jarFiles=""
     fi
-    groovy -cp ${jarFiles}/home/cilo/bin/:/home/cilo/tmp/:/home/cilo/workspace/:/home/cilo/workspace/${LIBRARY_PATH} "${CILOFILE_FULLPATH}"
+    groovy -cp ${jarFiles}/home/cilo/bin/:/home/cilo/.cilo/tmp/:/home/cilo/workspace/:/home/cilo/workspace/${LIBRARY_PATH} "${CILOFILE_FULLPATH}"
 else
     echo "COULD NOT FIND CILOFILE (${CILOFILE})."
 fi
