@@ -24,7 +24,7 @@ RUN addgroup -S cilogroup && adduser -S cilo -G cilogroup
 # SETUP DIRS
 USER cilo
 RUN echo 'export PS1="\u:\w$ "' >> ~/.bashrc &&\
-   echo 'docker() { unbuffer -p docker -H "$DOCKER_HOST_ADDRESS" $@ ; }' >> ~/.bashrc &&\
+   echo 'docker() { unbuffer -p docker -H "$CILO_DOCKER_ADDRESS" $@ ; }' >> ~/.bashrc &&\
    mkdir -p /home/cilo/bin/ &&\
    mkdir -p /home/cilo/secret/local/
 ADD cilo-scripts/ /home/cilo/bin/
@@ -32,8 +32,8 @@ ADD cilo-scripts/ /home/cilo/bin/
 #INSTALL AZURE
 USER root
 RUN cd /home/cilo/ &&\
-   pip --no-cache-dir install -U pip && \
-   pip --no-cache-dir install azure-cli && \
+   pip --no-cache-dir install -U pip &&\
+   #pip --no-cache-dir install azure-cli &&\  # TODO: Add azure once oathlib>=3.0.0 comes back online.
    apk del --purge build
 
 # INSTALL GROOVY START

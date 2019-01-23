@@ -17,7 +17,7 @@ BEGIN {
         if ( length(script) > 0 ) {
             i++
             sheBang="#!/usr/bin/env bash"
-            funcs="docker() { DOCKER_LOCATION=`which docker`; if ! [ -z ${DOCKER_HOST_ADDRESS+x} ]; then HSTRING=\"-H $DOCKER_HOST_ADDRESS \"; else HSTRING=''; fi; if type unbuffer &> /dev/null; then UNBUF='unbuffer -p '; else UNBUF=''; fi; ${UNBUF}\"${DOCKER_LOCATION}\" ${HSTRING}$@ ; }"
+            funcs="docker() { DOCKER_LOCATION=`which docker`; HSTRING=\"-H $CILO_DOCKER_ADDRESS \"; if type unbuffer &> /dev/null; then UNBUF='unbuffer -p '; else UNBUF=''; fi; ${UNBUF}\"${DOCKER_LOCATION}\" ${HSTRING}$@ ; }"
             lineNumberString="# script from line number " linum " of original file."
             filename="/home/cilo/.cilo/tmp/script" i ".sh"
             print sheBang "\n" lineNumberString "\n" funcs "\n" script >> filename

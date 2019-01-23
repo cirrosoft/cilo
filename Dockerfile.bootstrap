@@ -13,7 +13,7 @@ RUN apk add --no-cache bash &&\
 USER cilo
 RUN echo 'export PS1="\u:\w$ "' >> ~/.bashrc &&\
     echo 'source /home/cilo/completions/cilo-complete.sh' >> ~/.bashrc &&\
-    echo 'docker() { unbuffer -p docker -H "$DOCKER_HOST_ADDRESS" $@ ; }' >> ~/.bashrc &&\
+    echo 'docker() { unbuffer -p docker -H "$CILO_DOCKER_ADDRESS" $@ ; }' >> ~/.bashrc &&\
     mkdir -p /home/cilo/bin/ &&\
     mkdir -p /home/cilo/completions/ &&\
     mkdir -p /home/cilo/manpages/

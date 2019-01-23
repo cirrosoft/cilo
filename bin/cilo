@@ -176,20 +176,92 @@ EOF`
     LIBRARY_URL=""
     CREDENTIAL_SERVER_URL=""
 
-    DOCKER_HOST_ADDRESS="localhost"
+#########################################################################################################################
+#########################################################################################################################
+#
+#  Running Modes
+#
+#       In general there are 4 ways to run cilo. Two from windows and two from linux.
+#           1. Windows from cygwin with cilo source bash script.
+#           2. Windows with bootstrap batch script.
+#           3. Linux with cilo source bash script.
+#           4. Linux with bootstrap script.
+#
+#   There are two cilo features that use docker.
+#       Bootstrapping
+#       Inline docker from Cilang.
+#
+#       Bootstrapping is represented by the two boxes on the right. It works by running the cilo:bootstrap docker
+#   container which in turn runs the cilo source bash script. It is possible to infinatly nest docker calls since
+#   the default behavior for cilo is to use the true hosts docker instance for docker commands.
+#
+#       When you input a docker command via the '$' syntax in a run file. This is called Inlining docker from Cilang.
+#   This can be tricky to implement in code because connecting to the hosts docker machine from a nested docker
+#   requires several variables to be passed along.
+#
+#   The diagram below illustrates how several of these variables can be thought of.
+#
+#########################################################################################################################
+#########################################################################################################################
+#                                         _         _
+#                                 __ __ _(_)_ _  __| |_____ __ _____
+#                                 \ V  V / | ' \/ _` / _ \ V  V (__>
+#                                  \_/\_/|_|_||_\__,_\___/\_/\_//__/    <- - - - - - - - - - - - - - - - - - - - - - - -+
+#                                                             +-Bootstrap Docker------------+                           
+#              +-Cilo Docker----------+                       |  +-Cilo Docker----------+   |                           |
+#              |   +-Run Docker---+   |                       |  |   +-Run Docker---+   |   |                           
+#              |   |              |   |                       |  |   |              |   |   |                           |
+#              |   |              |   |                       |  |   |              |   |   |                           
+#              |   +--+-----------+   |                       |  |   +--+-----------+   |   |                           |
+#              +------|-------+-------+                       |  +------|----+----------+   |                           
+#                     |       |                   ___         +---------|----|-----+--------+                           |
+#         'localhost' +-------|----------------+ / _ \ +----------------+    |     | 'localhost'            <-------  CILO_DOCKER_ROOT_ADDRESS
+#                             |                 | (_) | |--------------------+     | 'host.docker.internal' <------- *CILO_DOCKER_HOST_ADDRESS
+#    'host.docker.internal'   +----------------+ \___/ +---------------------------+ 'host.docker.internal' <------- *CILO_DOCKER_HOST_ADDRESS
+#                                            Docker Machine                                                             |
+#                                       _    _
+#                                      | |  (_)_ _ _  ___ __                                                            |
+#                                      | |__| | ' \ || \ \ /                                                            
+#                                      |____|_|_||_\_,_/_\_\   <- - - - - - - - - - - - - - - - - - - -  - - - - -   CILO_HOST_OS
+#                                                              +-Bootstrap Docker------------+
+#               +-Cilo Docker----------+                       |  +-Cilo Docker----------+   |
+#               |   +-Run Docker---+   |                       |  |   +-Run Docker---+   |   |
+#               |   |              |   |                       |  |   |              |   |   |
+#               |   |              |   |                       |  |   |              |   |   |
+#               |   +--+-----------+   |                       |  |   +--+-----------+   |   |
+#               +--------------+-------+                       |  +------|----+----------+   |
+#                      |       |                   ___         +---------|----|-----+--------+
+#          'localhost' +-------|----------------+ / _ \ +----------------+    |     | 'localhost' <-------  CILO_DOCKER_ROOT_ADDRESS
+#                              |                 | (_) | |--------------------+     | 'localhost' <------- *CILO_DOCKER_HOST_ADDRESS
+#          'localhost'         +----------------+ \___/ +---------------------------+ 'localhost' <------- *CILO_DOCKER_HOST_ADDRESS
+#                                             Docker Machine
+#########################################################################################################################
+#########################################################################################################################
+
+    CILO_DOCKER_ROOT_ADDRESS="localhost"
+    CILO_DOCKER_HOST_ADDRESS="localhost"
+    CILO_HOST_OS="linux"
     if isWindows; then
-        DOCKER_HOST_ADDRESS="host.docker.internal"
+        CILO_HOST_OS="windows"
+        CILO_DOCKER_ROOT_ADDRESS="localhost"
     fi
-    if ! [ -z ${CILO_IS_WINDOWS+x} ]; then
-        DOCKER_HOST_ADDRESS="host.docker.internal"
+    if isHostWindows; then
+        CILO_DOCKER_HOST_ADDRESS="host.docker.internal"
     fi
-    # 
-    # TODO: Use original volumes when mounting a container in a container.
-    #
+
     DOCKER_HOST_OPTION=""
-    if ! [ -z ${CILO_BOOTSTRAP+x} ]; then
-        DOCKER_HOST_OPTION="-H ${DOCKER_HOST_ADDRESS}"
+    if ! [ -z ${CILO_IS_NESTED+x} ]; then
+        CILO_DOCKER_ADDRESS="${CILO_DOCKER_HOST_ADDRESS}"
+    else
+        CILO_DOCKER_ADDRESS="${CILO_DOCKER_ROOT_ADDRESS}"
     fi
+    DOCKER_HOST_OPTION="-H ${CILO_DOCKER_ADDRESS}"
+
+    #echo "CILO_HOST_OS=${CILO_HOST_OS}"
+    #echo "CILO_DOCKER_ROOT_ADDRESS=${CILO_DOCKER_ROOT_ADDRESS}"
+    #echo "CILO_DOCKER_HOST_ADDRESS=${CILO_DOCKER_HOST_ADDRESS}"
+    #echo "CILO_DOCKER_ADDRESS=${CILO_DOCKER_ADDRESS}"
+    #echo "DOCKER_HOST_OPTION=${DOCKER_HOST_OPTION}"
 
     CILO_TEMP_DIRECTORY="$HOME/.cilo/tmp"
     CILO_SECRET_DIRECTORY="$HOME/.cilo/secret"
@@ -907,8 +979,8 @@ copyGitInformation() {
 }
 
 dockerGet() {
-    if ! [ -z ${DOCKER_HOST_ADDRESS+x} ]; then
-        curl -s "${DOCKER_HOST_ADDRESS}:2375" "http:$1" 2>&1
+    if isWindows; then
+        curl -s "${CILO_DOCKER_ADDRESS}:2375" "http:$1" 2>&1
     else
         curl -s --unix-socket "$DOCKER_SOCKET" "http:$1" 2>&1
     fi
@@ -916,8 +988,8 @@ dockerGet() {
 }
 
 dockerPost() {
-    if ! [ -z ${DOCKER_HOST_ADDRESS+x} ]; then
-        curl --post301 -s "${DOCKER_HOST_ADDRESS}:2375" "http:$1" 2>&1
+    if isWindows; then
+        curl --post301 -s "${CILO_DOCKER_HOST_ADDRESS}:2375" "http:$1" 2>&1
     else
         curl --post301 -s --unix-socket "$DOCKER_SOCKET" "http:$1" 2>&1
     fi
@@ -1012,11 +1084,11 @@ runCiloScript() {
         if ! $QUITE; then info "%s\n" "Encrypting secrets using generated token."; fi
         volumeOne=`convertPath "$CILO_TEMP_DIRECTORY:/home/cilo/.cilo/tmp"`
         MOUNTS="-v $volumeOne"
-        if ! [ -z ${CILO_BOOTSTRAP+x} ]; then
+        if ! [ -z ${CILO_IS_NESTED+x} ]; then
             volumeOne=`convertPath "$CILO_HOST_HOME/.cilo/tmp:/home/cilo/.cilo/tmp"`
             MOUNTS="-v $volumeOne ${CILO_MOUNTS}"
         fi
-        docker ${DOCKER_HOST_OPTION} run -t --rm ${MOUNTS} --name "${PROJECT_NAME}-${RUN_NAME}-cilo-encrypt-temporary" -e SECRET_KEY="$SECRET_KEY" -e USER_KEY="$USER_KEY" -e DOCKER_HOST_ADDRESS="$DOCKER_HOST_ADDRESS" "$DOCKER_IMAGE_NAME" "cilo-encrypt-temporary" > /dev/null 2> /dev/null
+        docker ${DOCKER_HOST_OPTION} run -t --rm ${MOUNTS} --name "${PROJECT_NAME}-${RUN_NAME}-cilo-encrypt-temporary" -e SECRET_KEY="$SECRET_KEY" -e USER_KEY="$USER_KEY" -e CILO_DOCKER_ADDRESS="$CILO_DOCKER_HOST_ADDRESS" -e CILO_HOST_OS="${CILO_HOST_OS}" "$DOCKER_IMAGE_NAME" "cilo-encrypt-temporary" > /dev/null 2> /dev/null
         if ! [ "$?" = "0" ]; then
             error "%s\n" "Could not proccess secret(s). Make sure local secrets password is correct."
             exit 1
@@ -1042,29 +1114,36 @@ runCiloScript() {
             PTYPREFIX="winpty"
             WINI="i"
         fi
-        MOUNTS="-v $volumeOne"
-        if ! [ -z ${CILO_BOOTSTRAP+x} ]; then
+        MOUNTS="-v $volumeOne -v $volumeTwo"
+        if ! [ -z ${CILO_IS_NESTED+x} ]; then
             volumeOne=`convertPath "$CILO_HOST_HOME/.cilo/tmp:/home/cilo/.cilo/tmp"`
             MOUNTS="-v $volumeOne ${CILO_MOUNTS}"
         fi
-        $PTYPREFIX docker ${DOCKER_HOST_OPTION} run -${WINI}t --rm ${MOUNTS} --network="host" --name "$CONTAINER_NAME" $ENTRYPOINT -e SECRET_KEY="$SECRET_KEY" -e LIBRARY_PATH="$LIBRARY_PATH" -e CILOFILE="$CILOFILE" -e RUN_NAME="$RUN_NAME" -e RUN_NUMBER="$RUN_NUMBER" -e PROJECT_NAME="$PROJECT_NAME" -e DOCKER_HOST_ADDRESS="$DOCKER_HOST_ADDRESS" "$DOCKER_IMAGE_NAME"
+        $PTYPREFIX docker ${DOCKER_HOST_OPTION} run -${WINI}t --rm ${MOUNTS} --network="host" --name "$CONTAINER_NAME" $ENTRYPOINT -e SECRET_KEY="$SECRET_KEY" -e LIBRARY_PATH="$LIBRARY_PATH" -e CILOFILE="$CILOFILE" -e RUN_NAME="$RUN_NAME" -e RUN_NUMBER="$RUN_NUMBER" -e PROJECT_NAME="$PROJECT_NAME" -e CILO_DOCKER_ADDRESS="$CILO_DOCKER_HOST_ADDRESS" -e CILO_HOST_OS="${CILO_HOST_OS}" "$DOCKER_IMAGE_NAME"
     fi
 }
 
 convertPath() {
-    unameOut="$(uname -s)"
-    case "${unameOut}" in
-        Linux*)     machine=Linux;;
-        Darwin*)    machine=Mac;;
-        CYGWIN*)    machine=Cygwin;;
-        MINGW*)     machine=MinGw;;
-        *)          machine="UNKNOWN:${unameOut}"
-    esac
-    if  [ "$machine" = "MinGw" ]; then
+    if isWindows; then
         printf "%s" $1 | sed 's|/c/|//c/|g'
         return
     fi
     printf "%s" $1
+}
+
+
+isHostWindows() {
+    host_os="${CILO_HOST_OS}"
+    case "${host_os}" in
+        windows*)     os=windows;;
+        linux*)       os=linux;;
+        *)            os=linux
+    esac
+    if  [ "$os" = "windows" ]; then
+        true
+        return
+    fi
+    false
 }
 
 isWindows() {
@@ -1076,7 +1155,7 @@ isWindows() {
         MINGW*)     machine=MinGw;;
         *)          machine="UNKNOWN:${unameOut}"
     esac
-    if  [ "$machine" = "MinGw" ]; then
+    if  [ "$machine" = "MinGw" ] || [ "$machine" = "Cygwin" ]; then
         true
         return
     fi
@@ -1094,25 +1173,21 @@ runCiloBash() {
         fi
         volumeOne=`convertPath "$CILO_TEMP_DIRECTORY:/home/cilo/.cilo/tmp"`
         volumeTwo=`convertPath "$PWD:/home/cilo/workspace"`
-        MOUNTS="-v $volumeOne"
-        if ! [ -z ${CILO_BOOTSTRAP+x} ]; then
+        MOUNTS="-v $volumeOne -v $volumeTwo"
+        if ! [ -z ${CILO_IS_NESTED+x} ]; then
             volumeOne=`convertPath "$CILO_HOST_HOME/.cilo/tmp:/home/cilo/.cilo/tmp"`
             MOUNTS="-v $volumeOne ${CILO_MOUNTS}"
         fi
-        docker ${DOCKER_HOST_OPTION} run -t --rm ${MOUNTS} --network="host" --name "$name" --entrypoint "bash" -e DOCKER_HOST_ADDRESS="$DOCKER_HOST_ADDRESS" "$DOCKER_IMAGE_NAME" -c "$command"
+        docker ${DOCKER_HOST_OPTION} run -t --rm ${MOUNTS} --network="host" --name "$name" --entrypoint "bash" -e CILO_DOCKER_ADDRESS="$CILO_DOCKER_HOST_ADDRESS" -e CILO_HOST_OS="${CILO_HOST_OS}" "$DOCKER_IMAGE_NAME" -c "$command"
     fi
 }
 
 validateDocker() {
-    if [ -S $DOCKER_SOCKET ] || ! [ -z ${DOCKER_HOST_ADDRESS+x} ]; then
-        local CURL_RESULT=`dockerGet /ping`
-        local JQ_RESULT=`printf "%s" "$CURL_RESULT" | jq -r '.message' 2>&1`
-        if ! [ "$JQ_RESULT" = "page not found" ]; then
-            error "%s\n" "Docker is not running or socket not listening. Make sure docker is running and socket is open."
-            exit 1
-        fi
-    else
-        error "$s\n" "Docker could not be found. Either docker is not running or the socket/address could not be found in location ($DOCKER_SOCKET or $DOCKER_HOST_ADDRESS)"
+    local CURL_RESULT=`dockerGet /ping`
+    local JQ_RESULT=`printf "%s" "$CURL_RESULT" | jq -r '.message' 2>&1`
+    if ! [ "$JQ_RESULT" = "page not found" ]; then
+        error "%s\n" "Docker is not running or socket not listening. Make sure docker is running and socket is open."
+        exit 1
     fi
 }
 
