@@ -181,7 +181,7 @@ EOF`
 #
 #  Running Modes
 #
-#       In general there are 4 ways to run cilo. Two from windows and two from linux.
+#       In general there are 4 ways to run cilo Illustrated by the diagram below. Two from windows and two from linux.
 #           1. Windows from cygwin with cilo source bash script.
 #           2. Windows with bootstrap batch script.
 #           3. Linux with cilo source bash script.
@@ -240,7 +240,9 @@ EOF`
 
     CILO_DOCKER_ROOT_ADDRESS="localhost"
     CILO_DOCKER_HOST_ADDRESS="localhost"
-    CILO_HOST_OS="linux"
+    if [ -z ${CILO_HOST_OS+x} ]; then
+        CILO_HOST_OS="linux"
+    fi
     if isWindows; then
         CILO_HOST_OS="windows"
         CILO_DOCKER_ROOT_ADDRESS="localhost"
@@ -250,18 +252,19 @@ EOF`
     fi
 
     DOCKER_HOST_OPTION=""
-    if ! [ -z ${CILO_IS_NESTED+x} ]; then
+    if [ ! -z ${CILO_IS_NESTED+x} ]; then
         CILO_DOCKER_ADDRESS="${CILO_DOCKER_HOST_ADDRESS}"
     else
         CILO_DOCKER_ADDRESS="${CILO_DOCKER_ROOT_ADDRESS}"
     fi
     DOCKER_HOST_OPTION="-H ${CILO_DOCKER_ADDRESS}"
 
-    #echo "CILO_HOST_OS=${CILO_HOST_OS}"
-    #echo "CILO_DOCKER_ROOT_ADDRESS=${CILO_DOCKER_ROOT_ADDRESS}"
-    #echo "CILO_DOCKER_HOST_ADDRESS=${CILO_DOCKER_HOST_ADDRESS}"
-    #echo "CILO_DOCKER_ADDRESS=${CILO_DOCKER_ADDRESS}"
-    #echo "DOCKER_HOST_OPTION=${DOCKER_HOST_OPTION}"
+    echo "CILO_IS_NESTED=${CILO_IS_NESTED}"
+    echo "CILO_HOST_OS=${CILO_HOST_OS}"
+    echo "CILO_DOCKER_ROOT_ADDRESS=${CILO_DOCKER_ROOT_ADDRESS}"
+    echo "CILO_DOCKER_HOST_ADDRESS=${CILO_DOCKER_HOST_ADDRESS}"
+    echo "CILO_DOCKER_ADDRESS=${CILO_DOCKER_ADDRESS}"
+    echo "DOCKER_HOST_OPTION=${DOCKER_HOST_OPTION}"
 
     CILO_TEMP_DIRECTORY="$HOME/.cilo/tmp"
     CILO_SECRET_DIRECTORY="$HOME/.cilo/secret"
@@ -430,7 +433,6 @@ runCommand() {
     if ! [ "${extension}" = "cilo" ]; then
         warn "%s\n" "Please consider using the \".cilo\" extension for this Cilofile."
     fi
-    validateDocker
     runCiloScript "cilo-run-cilofile"
     exit 0
 }
@@ -450,7 +452,6 @@ versionCommand() {
 }
 
 shellCommand() {
-    validateDocker
     runCiloScript "bash"
     exit 0
 }
@@ -978,23 +979,6 @@ copyGitInformation() {
     fi
 }
 
-dockerGet() {
-    if isWindows; then
-        curl -s "${CILO_DOCKER_ADDRESS}:2375" "http:$1" 2>&1
-    else
-        curl -s --unix-socket "$DOCKER_SOCKET" "http:$1" 2>&1
-    fi
-
-}
-
-dockerPost() {
-    if isWindows; then
-        curl --post301 -s "${CILO_DOCKER_HOST_ADDRESS}:2375" "http:$1" 2>&1
-    else
-        curl --post301 -s --unix-socket "$DOCKER_SOCKET" "http:$1" 2>&1
-    fi
-}
-
 dockerHasImage() {
     if ! [[ `docker ${DOCKER_HOST_OPTION} images -q "$1" 2> /dev/null` == "" ]]; then
         true
@@ -1179,15 +1163,6 @@ runCiloBash() {
             MOUNTS="-v $volumeOne ${CILO_MOUNTS}"
         fi
         docker ${DOCKER_HOST_OPTION} run -t --rm ${MOUNTS} --network="host" --name "$name" --entrypoint "bash" -e CILO_DOCKER_ADDRESS="$CILO_DOCKER_HOST_ADDRESS" -e CILO_HOST_OS="${CILO_HOST_OS}" "$DOCKER_IMAGE_NAME" -c "$command"
-    fi
-}
-
-validateDocker() {
-    local CURL_RESULT=`dockerGet /ping`
-    local JQ_RESULT=`printf "%s" "$CURL_RESULT" | jq -r '.message' 2>&1`
-    if ! [ "$JQ_RESULT" = "page not found" ]; then
-        error "%s\n" "Docker is not running or socket not listening. Make sure docker is running and socket is open."
-        exit 1
     fi
 }
 

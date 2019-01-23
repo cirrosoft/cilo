@@ -1,7 +1,6 @@
 #!/usr/bin/env sh
 if [ -e "${CILOFILE}" ]; then
     # BASE IMPORT
-    echo "CILOFILE=$CILOFILE"
     CILOFILE_FULLPATH="/home/cilo/.cilo/tmp/${CILOFILE}"
     mkdir -p "/home/cilo/.cilo/tmp/"
     touch "$CILOFILE_FULLPATH"
